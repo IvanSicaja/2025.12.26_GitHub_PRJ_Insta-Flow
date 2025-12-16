@@ -145,6 +145,7 @@ class ImageSorterApp(QMainWindow):
             """)
             checkbox.setToolTip('Enable editing of folder name')
             checkbox.setFocusPolicy(Qt.NoFocus)
+            checkbox.clicked.connect(self.on_pencil_clicked)  # Ensure focus returns after click
             row.addWidget(checkbox)
 
             edit = QLineEdit(default_names[i])
@@ -212,10 +213,13 @@ class ImageSorterApp(QMainWindow):
 
         right_container = QWidget()
         right_container.setLayout(right_panel)
+        right_container.setFocusPolicy(Qt.StrongFocus)
+        right_container.mousePressEvent = lambda e: right_container.setFocus()  # Click on preview area restores arrow control
         root_layout.addWidget(right_container, 1)
 
-        # Make the right preview area focusable so arrows work when clicking there
-        right_container.setFocusPolicy(Qt.StrongFocus)
+    def on_pencil_clicked(self):
+        # Called when any pencil button is clicked - ensures arrow keys work immediately after
+        self.centralWidget().setFocus()
 
     def open_folder(self):
         last_folder = self.settings.value('last_folder', '')
@@ -238,7 +242,7 @@ class ImageSorterApp(QMainWindow):
 
         self.current_index = 0
         self.update_previews()
-        self.centralWidget().setFocus()  # Return focus to main area
+        self.centralWidget().setFocus()
 
     def load_existing_subfolders(self):
         if not self.current_folder:
@@ -306,7 +310,7 @@ class ImageSorterApp(QMainWindow):
         else:
             self.mode_button.setText('Mode: MOVE')
         self.update_mode_button_style()
-        self.centralWidget().setFocus()  # Return arrow control after clicking mode
+        self.centralWidget().setFocus()
 
     def update_mode_button_style(self):
         if self.copy_mode:
@@ -347,7 +351,7 @@ class ImageSorterApp(QMainWindow):
                 lbl.clear()
 
     def keyPressEvent(self, event):
-        # Only allow normal arrow cursor movement inside QLineEdit
+        # Only allow arrow keys for cursor movement when a QLineEdit has focus
         if isinstance(self.focusWidget(), QLineEdit):
             super().keyPressEvent(event)
             return
@@ -412,7 +416,7 @@ class ImageSorterApp(QMainWindow):
         if not self.copy_mode and was_last_image:
             QMessageBox.information(self, 'Done', 'No more images to preview.')
 
-        self.centralWidget().setFocus()  # Ensure arrows work again after sorting
+        self.centralWidget().setFocus()
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

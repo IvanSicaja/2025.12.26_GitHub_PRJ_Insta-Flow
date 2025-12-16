@@ -7,28 +7,26 @@ from PyQt5.QtWidgets import (
     QSlider, QMessageBox
 )
 from PyQt5.QtGui import QPixmap
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QSettings
 
 IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.bmp', '.gif')
-
 
 class ImageSorterApp(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle('Image Sorting Preview App')
         self.resize(1200, 800)
-
         self.current_folder = None
         self.images = []
         self.current_index = 0
         self.copy_mode = True  # True = Copy, False = Move
-
+        self.settings = QSettings('ImageSorterApp', 'Settings')
         self._build_ui()
+        self.update_mode_button_style()
 
     def _build_ui(self):
         main_widget = QWidget()
         self.setCentralWidget(main_widget)
-
         root_layout = QHBoxLayout(main_widget)
 
         # LEFT PANEL (controls)
@@ -56,7 +54,6 @@ class ImageSorterApp(QMainWindow):
         self.folder_enabled = []
         for i in range(3):
             row = QHBoxLayout()
-
             key_label = QLabel(str(i + 1))
             key_label.setFixedWidth(20)
             row.addWidget(key_label)
@@ -76,6 +73,7 @@ class ImageSorterApp(QMainWindow):
 
             self.folder_inputs.append(edit)
             self.folder_enabled.append(checkbox)
+
             left_panel.addLayout(row)
 
         self.create_folders_btn = QPushButton('Create Folders')
@@ -113,16 +111,22 @@ class ImageSorterApp(QMainWindow):
         root_layout.addWidget(right_container, 1)
 
     def open_folder(self):
-        folder = QFileDialog.getExistingDirectory(self, 'Select Image Folder')
+        # Load last folder from settings
+        last_folder = self.settings.value('last_folder', '')
+        start_dir = last_folder if last_folder and os.path.isdir(last_folder) else os.getcwd()
+
+        folder = QFileDialog.getExistingDirectory(self, 'Select Image Folder', start_dir)
         if not folder:
             return
 
         self.current_folder = folder
+        # Save the selected folder for next time
+        self.settings.setValue('last_folder', folder)
+
         self.images = [
             f for f in sorted(os.listdir(folder))
             if f.lower().endswith(IMAGE_EXTENSIONS)
         ]
-
         if not self.images:
             QMessageBox.warning(self, 'No Images', 'Selected folder has no images.')
             return
@@ -133,11 +137,9 @@ class ImageSorterApp(QMainWindow):
     def create_folders(self):
         if not self.current_folder:
             return
-
         for edit in self.folder_inputs:
             path = os.path.join(self.current_folder, edit.text())
             os.makedirs(path, exist_ok=True)
-
         QMessageBox.information(self, 'Folders Created', 'Target folders are ready.')
 
     def toggle_mode(self):
@@ -145,7 +147,16 @@ class ImageSorterApp(QMainWindow):
         if self.copy_mode:
             self.mode_button.setText('Mode: COPY')
         else:
-            self.mode_button.setText('Mode: MOVE')
+            self.mode_button.setText('Mode: MOVE ⚠️')  # Added warning symbol for extra caution reminder
+        self.update_mode_button_style()
+
+    def update_mode_button_style(self):
+        if self.copy_mode:
+            # Soft, comfortable light green
+            self.mode_button.setStyleSheet('QPushButton { background-color: #90EE90; color: black; font-weight: bold; }')
+        else:
+            # Soft, comfortable light yellow for caution
+            self.mode_button.setStyleSheet('QPushButton { background-color: #FFFFE0; color: black; font-weight: bold; }')
 
     def update_previews(self):
         if not self.images:
@@ -170,10 +181,9 @@ class ImageSorterApp(QMainWindow):
 
     def keyPressEvent(self, event):
         if not self.images:
-            return
+            return super().keyPressEvent(event)
 
         key = event.key()
-
         if key == Qt.Key_Right:
             self.current_index = min(self.current_index + 1, len(self.images) - 1)
             self.update_previews()
@@ -195,24 +205,34 @@ class ImageSorterApp(QMainWindow):
             return
 
         src_path = os.path.join(self.current_folder, self.images[self.current_index])
-        target_folder = os.path.join(self.current_folder, self.folder_inputs[folder_idx].text())
+        target_folder_name = self.folder_inputs[folder_idx].text().strip()
+        if not target_folder_name:
+            QMessageBox.warning(self, 'Invalid Folder', 'Folder name cannot be empty.')
+            return
+
+        target_folder = os.path.join(self.current_folder, target_folder_name)
         os.makedirs(target_folder, exist_ok=True)
 
         dst_path = os.path.join(target_folder, os.path.basename(src_path))
+
+        # Check if destination file already exists
+        if os.path.exists(dst_path):
+            QMessageBox.warning(self, 'File Exists', f'An image with the name "{os.path.basename(src_path)}" already exists in "{target_folder_name}". Operation skipped.')
+            return
 
         try:
             if self.copy_mode:
                 shutil.copy2(src_path, dst_path)
             else:
                 shutil.move(src_path, dst_path)
+                # Remove from list and adjust index after move
                 del self.images[self.current_index]
-                self.current_index = min(self.current_index, len(self.images) - 1)
+                self.current_index = min(self.current_index, len(self.images) - 1 if self.images else 0)
         except Exception as e:
             QMessageBox.critical(self, 'Error', str(e))
             return
 
         self.update_previews()
-
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

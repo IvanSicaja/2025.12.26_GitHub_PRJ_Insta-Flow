@@ -41,6 +41,8 @@ class ImageSorterApp(QMainWindow):
         left_scroll.setStyleSheet('QScrollArea { background-color: #f8f8f8; border: none; }')
 
         left_content = QWidget()
+        left_content.setFocusPolicy(Qt.ClickFocus)
+        left_content.mousePressEvent = lambda e: self.centralWidget().setFocus()  # Click on empty space restores arrow control
         left_panel = QVBoxLayout(left_content)
         left_panel.setAlignment(Qt.AlignTop)
         left_panel.setSpacing(12)
@@ -145,12 +147,13 @@ class ImageSorterApp(QMainWindow):
             """)
             checkbox.setToolTip('Enable editing of folder name')
             checkbox.setFocusPolicy(Qt.NoFocus)
-            checkbox.clicked.connect(self.on_pencil_clicked)  # Ensure focus returns after click
+            checkbox.clicked.connect(self.on_pencil_clicked)
             row.addWidget(checkbox)
 
             edit = QLineEdit(default_names[i])
             edit.setEnabled(False)
             edit.setStyleSheet('QLineEdit { padding: 6px; border-radius: 6px; }')
+            edit.focusInEvent = lambda e: QLineEdit.focusInEvent(edit, e)  # Normal focus for editing
             row.addWidget(edit)
 
             checkbox.toggled.connect(edit.setEnabled)
@@ -214,11 +217,10 @@ class ImageSorterApp(QMainWindow):
         right_container = QWidget()
         right_container.setLayout(right_panel)
         right_container.setFocusPolicy(Qt.StrongFocus)
-        right_container.mousePressEvent = lambda e: right_container.setFocus()  # Click on preview area restores arrow control
+        right_container.mousePressEvent = lambda e: right_container.setFocus()
         root_layout.addWidget(right_container, 1)
 
     def on_pencil_clicked(self):
-        # Called when any pencil button is clicked - ensures arrow keys work immediately after
         self.centralWidget().setFocus()
 
     def open_folder(self):
@@ -351,9 +353,9 @@ class ImageSorterApp(QMainWindow):
                 lbl.clear()
 
     def keyPressEvent(self, event):
-        # Only allow arrow keys for cursor movement when a QLineEdit has focus
-        if isinstance(self.focusWidget(), QLineEdit):
-            super().keyPressEvent(event)
+        # Only allow arrow keys for cursor movement when a QLineEdit has focus and the event is for cursor
+        if isinstance(self.focusWidget(), QLineEdit) and event.key() in (Qt.Key_Left, Qt.Key_Right):
+            self.focusWidget().event(event)
             return
 
         if not self.images:

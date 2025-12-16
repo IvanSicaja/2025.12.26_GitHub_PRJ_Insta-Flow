@@ -1,8 +1,7 @@
-**🧾 🎯 Role title:** **Drone Development Team Lead – Barcelona Smart Drone Challenge 2019  
-📍 Location:** Aero-association Split, Ruđera Boškovića 32, HR-21000 Split, Croatia  
-**📅 Project Timeline:** Dec 2018 – May 2019  
+**🧾 🎯 Project Title: INSTA FLOW - IMAGE SORTING & PREVIEW  
+📅 Project Timeline:** October 2025  
 🎥 YouTube Demo: Not available  
-📦 GitHub: <https://github.com/IvanSicaja/2018.12.01_GitHub_Barcelona-Smart-Drone-Challenge-2019>  
+📦 GitHub Source Code: <https://github.com/IvanSicaja/2025.12.26_GitHub_PRJ_Insta-Flow>  
 \----------------------------------------------------------------------------------------------------------------
 
 🏷️ My Personal Profiles: ⬇︎  
@@ -12,24 +11,51 @@
 🎥 YouTube: <https://www.youtube.com/@ivan_sicaja>  
 \----------------------------------------------------------------------------------------------------------------
 
-📚🔍 **Project Description:**
+### 📚🔍 Project description: ⬇︎⬇︎⬇︎
 
-💡 **Role/Project Description:**  
-As **Team Lead** for the **Barcelona Smart Drone Challenge 2019**, I aimed **to coordinate multidisciplinary teams** including the **Battery & Propulsion Systems team**, **Radio Communication & Signal Encryption team**, **Drone Frame Design team**, **Autopilot team**, **Object Detection team**, and **Delivery team**, ensuring seamless integration across all **UAV subsystems**:
+### 💡 App Purpose
 
-- **To lead** the **Battery & Propulsion Systems team** to design and optimize **motors, propellers, batteries, and ESCs** for endurance and efficiency using **eCalc.ch**.
-- **To implement** **secure digital radio communication** with **signal encryption**, coordinating the **Radio Communication & Signal Encryption team**.
-- **To supervise** the **Drone Frame Design team** in creating a **lightweight, aerodynamic, and durable structure**.
-- **To guide** the **Autopilot team** in integrating **ArduPilot Mission Planner, Pixhawk, and Odroid**, enabling **fully autonomous flight**.
-- **To oversee** the **Object Detection team** for accurate **ground target recognition**.
-- **To coordinate** the **Delivery team**, ensuring precise and reliable **autonomous package delivery**.
-- **To ensure** smooth **multidisciplinary collaboration**, balancing technical innovation with competition constraints.
+**Insta Flow** is a desktop-based image sorting and preview application designed for fast, keyboard-driven image triage workflows.  
+The application enables users to preview images in large format, maintain visual context of surrounding images, and efficiently copy or move files into predefined or custom folders using simple keyboard shortcuts.
 
-⚠️ **Note:**  
-Due to **insufficient sponsorship**, the team **did not participate in the tournament**.
+The tool is ideal for photographers, content creators, and anyone managing large image datasets who needs speed, clarity, and safety when organizing files.
 
-🔧 **Tech Stack:**  
-**Drone Development, Battery & Propulsion Systems, eCalc.ch, Digital Radio Communication, Signal Encryption, Drone Frame Design, ArduPilot Mission Planner, Pixhawk, Odroid, Autonomous Flight, Object Detection, Target Recognition, Package Delivery**
+🧠 How It Works
 
-📣 **Hashtags:**  
-\# #**DroneDevelopment** #**UAV** #**AutonomousSystems** #**PropulsionDesign** #**BatterySystems** #**RadioCommunication** #**SignalEncryption** #**FrameDesign** #**ArduPilot** #**Pixhawk** #**Odroid** #**SmartDroneChallenge** #**TeamLead** #**AerospaceEngineering** #**AutonomousFlight** #**ObjectDetection** #**PackageDelivery**
+- The user selects a folder containing images.
+- All supported image files are loaded and displayed:
+  - One image in a **large primary preview window**
+  - Five images in a **secondary preview strip** (two previous, current, two next)
+- The user navigates images using:
+  - **Left Arrow** → Previous image
+  - **Right Arrow** → Next image
+- Images are sorted using number keys:
+  - **1 / 2 / 3** → Copy or move the currently previewed image to the corresponding folder
+- Folder behavior:
+  - Default folders: folder 1, folder 2, folder 3
+  - Optional custom folder names can be enabled per folder
+- Sorting modes:
+  - **COPY mode**: Original image remains untouched
+  - **MOVE mode**: Image is only deleted after a successful move
+
+All file operations are handled safely to prevent data loss.
+
+### ⚠️ Note
+
+None.
+
+### 🔧 Tech Stack
+
+**Python, PyQt5 (Desktop GUI), OS / File System Operations, Keyboard Event Handling, Application Design**
+
+### 📸 Project Snapshot
+
+Not available.
+
+### 🎥 Video Demonstration
+
+Not available.
+
+### 📣 Hashtags Section
+
+\# #InstaFlow #Python #PyQt5 #ImageSorting #DesktopApp #FileManagement #ProductivityTool #KeyboardDriven #SoftwareDevelopment #GUIApplication #ImageWorkflow #GitHub #Automation #DeveloperTools

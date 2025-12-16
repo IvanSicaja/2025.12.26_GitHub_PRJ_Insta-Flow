@@ -15,11 +15,11 @@ class ImageSorterApp(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle('Image Sorting Preview App')
-        self.resize(1500, 900)  # Slightly larger window for better visibility
+        self.resize(1500, 900)
         self.current_folder = None
         self.images = []
         self.current_index = 0
-        self.copy_mode = True  # True = Copy, False = Move
+        self.copy_mode = True
         self.settings = QSettings('ImageSorterApp', 'Settings')
         self._build_ui()
         self.update_mode_button_style()
@@ -29,38 +29,47 @@ class ImageSorterApp(QMainWindow):
         self.setCentralWidget(main_widget)
         root_layout = QHBoxLayout(main_widget)
 
-        # LEFT PANEL - wider and with clear section instructions
+        # LEFT PANEL
         left_panel = QVBoxLayout()
         left_panel.setAlignment(Qt.AlignTop)
         left_panel.setSpacing(16)
 
-        # Instruction above Open Folder
-        open_instruction = QLabel('1. Select the folder containing images to sort:')
-        open_instruction.setStyleSheet('QLabel { color: #444; font-size: 11pt; margin-top: 10px; }')
-        open_instruction.setWordWrap(True)
-        left_panel.addWidget(open_instruction)
+        # 1. Select folder
+        lbl1 = QLabel('1. Select the folder containing images to sort:')
+        lbl1.setStyleSheet('QLabel { color: #444; font-size: 11pt; }')
+        lbl1.setWordWrap(True)
+        left_panel.addWidget(lbl1)
 
         self.open_btn = QPushButton('Open Folder')
         self.open_btn.setFocusPolicy(Qt.NoFocus)
         self.open_btn.setMinimumHeight(40)
         self.open_btn.setStyleSheet("""
-            QPushButton {
-                border: 2px solid #aaa;
-                border-radius: 8px;
-                padding: 8px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #f0f0f0;
-            }
+            QPushButton { border: 2px solid #aaa; border-radius: 8px; padding: 8px; font-weight: bold; }
+            QPushButton:hover { background-color: #f0f0f0; }
         """)
         self.open_btn.clicked.connect(self.open_folder)
         left_panel.addWidget(self.open_btn)
 
-        # Instruction above Mode button
-        mode_instruction = QLabel('2. Choose operation mode:')
-        mode_instruction.setStyleSheet('QLabel { color: #444; font-size: 11pt; margin-top: 20px; }')
-        left_panel.addWidget(mode_instruction)
+        # 2. Navigation info
+        lbl2 = QLabel('2. Navigate preview images:')
+        lbl2.setStyleSheet('QLabel { color: #444; font-size: 11pt; margin-top: 20px; }')
+        left_panel.addWidget(lbl2)
+
+        nav_info = QLabel('Use ← → arrow keys to move between images\nPress 1–0 to sort current image')
+        nav_info.setWordWrap(True)
+        nav_info.setStyleSheet('QLabel { color: #666; font-size: 12pt; }')
+        left_panel.addWidget(nav_info)
+
+        # 3. Operation mode
+        lbl3 = QLabel('3. Choose operation mode:')
+        lbl3.setStyleSheet('QLabel { color: #444; font-size: 11pt; margin-top: 20px; }')
+        left_panel.addWidget(lbl3)
+
+        mode_desc = QLabel('• COPY: images are duplicated to target folder\n'
+                           '• MOVE: images are moved (deleted from current folder)')
+        mode_desc.setWordWrap(True)
+        mode_desc.setStyleSheet('QLabel { color: #555; font-size: 11pt; }')
+        left_panel.addWidget(mode_desc)
 
         self.mode_button = QPushButton('Mode: COPY')
         self.mode_button.setCheckable(True)
@@ -69,39 +78,26 @@ class ImageSorterApp(QMainWindow):
         self.mode_button.clicked.connect(self.toggle_mode)
         left_panel.addWidget(self.mode_button)
 
-        # Create Folders button with rounded style
-        self.create_folders_btn = QPushButton('Create Folders')
-        self.create_folders_btn.setFocusPolicy(Qt.NoFocus)
-        self.create_folders_btn.setMinimumHeight(40)
-        self.create_folders_btn.setStyleSheet("""
-            QPushButton {
-                border: 2px solid #aaa;
-                border-radius: 8px;
-                padding: 8px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #f0f0f0;
-            }
-        """)
-        self.create_folders_btn.clicked.connect(self.create_folders)
-        left_panel.addWidget(self.create_folders_btn)
+        # 4. Target folders configuration
+        lbl4 = QLabel('4. Configure target folders (press key to sort to folder):')
+        lbl4.setStyleSheet('QLabel { font-weight: bold; color: #333; font-size: 12pt; margin-top: 25px; }')
+        left_panel.addWidget(lbl4)
 
-        # General navigation info
-        info_label = QLabel('Navigate with ← → arrows\nSort current image with keys 1–0')
-        info_label.setWordWrap(True)
-        info_label.setStyleSheet('QLabel { color: #666; font-size: 12pt; margin-top: 20px; }')
-        left_panel.addWidget(info_label)
-
-        # Folder configuration section
-        header_label = QLabel('3. Configure target folders (press key to sort to folder):')
-        header_label.setStyleSheet('QLabel { font-weight: bold; color: #333; font-size: 12pt; margin-top: 20px; }')
-        left_panel.addWidget(header_label)
-
-        sub_header = QLabel('Check ✎ to edit folder name · Only folders with names will be created')
+        sub_header = QLabel('Check Edit icon to rename · Only folders with names will be created')
         sub_header.setWordWrap(True)
         sub_header.setStyleSheet('QLabel { color: #555; font-size: 11pt; }')
         left_panel.addWidget(sub_header)
+
+        # Load existing subfolders button
+        self.load_folders_btn = QPushButton('Load Existing Subfolders')
+        self.load_folders_btn.setFocusPolicy(Qt.NoFocus)
+        self.load_folders_btn.setMinimumHeight(36)
+        self.load_folders_btn.setStyleSheet("""
+            QPushButton { border: 1px solid #999; border-radius: 6px; padding: 6px; background-color: #e8f5e9; }
+            QPushButton:hover { background-color: #c8e6c9; }
+        """)
+        self.load_folders_btn.clicked.connect(self.load_existing_subfolders)
+        left_panel.addWidget(self.load_folders_btn)
 
         # 10 folder inputs
         self.folder_inputs = []
@@ -111,42 +107,59 @@ class ImageSorterApp(QMainWindow):
         for i in range(10):
             row = QHBoxLayout()
 
-            key_label = QLabel(str((i + 1) % 10))  # 1–9, 0 for 10th
-            key_label.setFixedWidth(30)
-            key_label.setAlignment(Qt.AlignCenter)
-            key_label.setStyleSheet('QLabel { font-weight: bold; font-size: 12pt; }')
-            row.addWidget(key_label)
+            key_lbl = QLabel(str((i + 1) % 10))
+            key_lbl.setFixedWidth(30)
+            key_lbl.setAlignment(Qt.AlignCenter)
+            key_lbl.setStyleSheet('QLabel { font-weight: bold; font-size: 12pt; }')
+            row.addWidget(key_lbl)
 
-            checkbox = QPushButton('✎')
-            checkbox.setCheckable(True)
-            checkbox.setFixedWidth(40)
-            checkbox.setToolTip('Enable editing of folder name')
-            checkbox.setFocusPolicy(Qt.NoFocus)
-            row.addWidget(checkbox)
+            edit_btn = QPushButton('Edit')
+            edit_btn.setCheckable(True)
+            edit_btn.setFixedWidth(40)
+            edit_btn.setToolTip('Enable editing of folder name')
+            edit_btn.setFocusPolicy(Qt.NoFocus)
+            row.addWidget(edit_btn)
 
             edit = QLineEdit(default_names[i])
             edit.setEnabled(False)
             edit.setMinimumWidth(180)
             row.addWidget(edit)
 
-            checkbox.toggled.connect(edit.setEnabled)
+            edit_btn.toggled.connect(edit.setEnabled)
 
             self.folder_inputs.append(edit)
-            self.folder_enabled.append(checkbox)
+            self.folder_enabled.append(edit_btn)
 
             left_panel.addLayout(row)
+
+        # Create Folders button at the very bottom
+        self.create_folders_btn = QPushButton('Create Folders')
+        self.create_folders_btn.setFocusPolicy(Qt.NoFocus)
+        self.create_folders_btn.setMinimumHeight(44)
+        self.create_folders_btn.setStyleSheet("""
+            QPushButton {
+                border: 2px solid #43a047;
+                border-radius: 8px;
+                padding: 10px;
+                font-weight: bold;
+                background-color: #e8f5e9;
+                color: #2e7d32;
+            }
+            QPushButton:hover { background-color: #c8e6c9; }
+        """)
+        self.create_folders_btn.clicked.connect(self.create_folders)
+        left_panel.addWidget(self.create_folders_btn)
 
         left_panel.addSpacerItem(QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding))
 
         left_container = QWidget()
         left_container.setLayout(left_panel)
-        left_container.setFixedWidth(320)  # Much wider for full text visibility
+        left_container.setFixedWidth(340)
         left_container.setStyleSheet('QWidget { background-color: #f8f8f8; }')
         root_layout.addWidget(left_container)
 
-        # RIGHT PANEL (image previews)
+        # RIGHT PANEL (previews)
         right_panel = QVBoxLayout()
-
         self.main_image_label = QLabel()
         self.main_image_label.setAlignment(Qt.AlignCenter)
         self.main_image_label.setStyleSheet('background-color: #222;')
@@ -161,7 +174,6 @@ class ImageSorterApp(QMainWindow):
             lbl.setStyleSheet('background-color: #444; border: 1px solid #555;')
             self.secondary_labels.append(lbl)
             self.secondary_layout.addWidget(lbl)
-
         right_panel.addLayout(self.secondary_layout, 2)
 
         right_container = QWidget()
@@ -171,11 +183,9 @@ class ImageSorterApp(QMainWindow):
     def open_folder(self):
         last_folder = self.settings.value('last_folder', '')
         start_dir = last_folder if last_folder and os.path.isdir(last_folder) else os.getcwd()
-
         folder = QFileDialog.getExistingDirectory(self, 'Select Image Folder', start_dir)
         if not folder:
             return
-
         self.current_folder = folder
         self.settings.setValue('last_folder', folder)
 
@@ -190,75 +200,88 @@ class ImageSorterApp(QMainWindow):
         self.current_index = 0
         self.update_previews()
 
+    def load_existing_subfolders(self):
+        if not self.current_folder:
+            QMessageBox.information(self, 'No Folder', 'Please open a folder first.')
+            return
+
+        subfolders = []
+        try:
+            for entry in os.listdir(self.current_folder):
+                full_path = os.path.join(self.current_folder, entry)
+                if os.path.isdir(full_path) and not entry.startswith('.'):
+                    subfolders.append(entry)
+        except Exception as e:
+            QMessageBox.critical(self, 'Error', f'Could not read subfolders:\n{e}')
+            return
+
+        if not subfolders:
+            QMessageBox.information(self, 'No Subfolders', 'No subfolders found in the selected folder.')
+            return
+
+        # Sort alphabetically and fill available slots
+        subfolders.sort(key=str.lower)
+        for i, name in enumerate(subfolders[:10]):
+            self.folder_inputs[i].setText(name)
+            self.folder_enabled[i].setChecked(True)  # Enable editing automatically
+
+        QMessageBox.information(
+            self, 'Subfolders Loaded',
+            f'Found and loaded {len(subfolders[:10])} existing subfolder(s) alphabetically.'
+        )
+
     def create_folders(self):
         if not self.current_folder:
             return
 
-        created_count = 0
-        already_exists_count = 0
-        empty_count = 0
+        created = 0
+        exists = 0
 
         for edit in self.folder_inputs:
             name = edit.text().strip()
             if not name:
-                empty_count += 1
                 continue
-
             path = os.path.join(self.current_folder, name)
             if os.path.exists(path):
-                already_exists_count += 1
+                exists += 1
             else:
                 os.makedirs(path, exist_ok=True)
-                created_count += 1
+                created += 1
 
-        if created_count > 0:
-            msg = f'{created_count} folder(s) created successfully.'
-            if already_exists_count > 0:
-                msg += f'\n{already_exists_count} folder(s) already exist and were skipped.'
-            QMessageBox.information(self, 'Folders Created', msg)
-        elif already_exists_count > 0:
-            QMessageBox.information(self, 'Folders Exist', 'All specified folders already exist.')
+        if created > 0:
+            msg = f'{created} folder(s) created.'
+            if exists > 0:
+                msg += f'\n{exists} already existed.'
+            QMessageBox.information(self, 'Done', msg)
+        elif exists > 0:
+            QMessageBox.information(self, 'Already Exist', 'All specified folders already exist.')
         else:
-            QMessageBox.information(self, 'No Folders', 'No folder names were provided.')
+            QMessageBox.information(self, 'No Names', 'No folder names provided.')
 
     def toggle_mode(self):
         self.copy_mode = not self.copy_mode
-        if self.copy_mode:
-            self.mode_button.setText('Mode: COPY')
-        else:
-            self.mode_button.setText('Mode: MOVE')  # Removed ⚠️ icon
+        self.mode_button.setText('Mode: COPY' if self.copy_mode else 'Mode: MOVE')
         self.update_mode_button_style()
 
     def update_mode_button_style(self):
         if self.copy_mode:
-            # Calm, safe green (kept as-is – you said it's great)
             self.mode_button.setStyleSheet("""
                 QPushButton {
-                    background-color: #e6f4ea;
-                    color: #2d6a4f;
-                    font-weight: bold;
-                    border: 2px solid #95d5b2;
-                    border-radius: 8px;
-                    padding: 8px;
+                    background-color: #e6f4ea; color: #2d6a4f; font-weight: bold;
+                    border: 2px solid #95d5b2; border-radius: 8px; padding: 8px;
                 }
             """)
         else:
-            # Yellow/orange caution tone for MOVE – visible but comfortable
             self.mode_button.setStyleSheet("""
                 QPushButton {
-                    background-color: #fff8e1;
-                    color: #e65100;
-                    font-weight: bold;
-                    border: 2px solid #ffca28;
-                    border-radius: 8px;
-                    padding: 8px;
+                    background-color: #fff8e1; color: #e65100; font-weight: bold;
+                    border: 2px solid #ffca28; border-radius: 8px; padding: 8px;
                 }
             """)
 
     def update_previews(self):
         if not self.images:
             return
-
         img_path = os.path.join(self.current_folder, self.images[self.current_index])
         pix = QPixmap(img_path)
         self.main_image_label.setPixmap(pix.scaled(
@@ -283,16 +306,12 @@ class ImageSorterApp(QMainWindow):
             self.current_index = min(self.current_index + 1, len(self.images) - 1)
             self.update_previews()
             event.accept()
-            return
         elif key == Qt.Key_Left:
             self.current_index = max(self.current_index - 1, 0)
             self.update_previews()
             event.accept()
-            return
-
-        if Qt.Key_1 <= key <= Qt.Key_9:
-            folder_idx = key - Qt.Key_1
-            self.handle_sort(folder_idx)
+        elif Qt.Key_1 <= key <= Qt.Key_9:
+            self.handle_sort(key - Qt.Key_1)
             event.accept()
         elif key == Qt.Key_0:
             self.handle_sort(9)
@@ -303,21 +322,18 @@ class ImageSorterApp(QMainWindow):
             return
 
         src_path = os.path.join(self.current_folder, self.images[self.current_index])
-        target_folder_name = self.folder_inputs[folder_idx].text().strip()
-        if not target_folder_name:
-            QMessageBox.warning(self, 'Invalid Folder', 'Folder name is empty. Set a name first.')
+        target_name = self.folder_inputs[folder_idx].text().strip()
+        if not target_name:
+            QMessageBox.warning(self, 'Empty Name', 'Folder name is empty. Set a name first.')
             return
 
-        target_folder = os.path.join(self.current_folder, target_folder_name)
+        target_folder = os.path.join(self.current_folder, target_name)
         os.makedirs(target_folder, exist_ok=True)
-
         dst_path = os.path.join(target_folder, os.path.basename(src_path))
 
         if os.path.exists(dst_path):
-            QMessageBox.warning(
-                self, 'File Exists',
-                f'An image named "{os.path.basename(src_path)}" already exists in "{target_folder_name}".\nOperation skipped.'
-            )
+            QMessageBox.warning(self, 'File Exists',
+                f'"{os.path.basename(src_path)}" already exists in "{target_name}".\nSkipped.')
             return
 
         try:

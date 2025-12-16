@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (
     QFileDialog, QHBoxLayout, QVBoxLayout, QLineEdit,
     QMessageBox, QSpacerItem, QSizePolicy
 )
-from PyQt5.QtGui import QPixmap
+from PyQt5.QtGui import QPixmap, QIcon
 from PyQt5.QtCore import Qt, QSettings
 
 IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.bmp', '.gif')
@@ -14,7 +14,8 @@ IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.bmp', '.gif')
 class ImageSorterApp(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('Image Sorting Preview App')
+        self.setWindowTitle('InstaFlow')
+        self.setWindowIcon(QIcon(r'..\assets\media\icons\icon.ico'))
         self.resize(1500, 900)
         self.current_folder = None
         self.images = []
@@ -217,6 +218,7 @@ class ImageSorterApp(QMainWindow):
 
         self.current_index = 0
         self.update_previews()
+        self.setFocus()  # Set focus back to window after dialog
 
     def load_existing_subfolders(self):
         if not self.current_folder:
@@ -245,6 +247,7 @@ class ImageSorterApp(QMainWindow):
                 f'Loaded {min(len(subfolders), 10)} existing subfolder(s) alphabetically.\n'
                 f'Total found: {len(subfolders)}'
             )
+            self.setFocus()  # Set focus back to window after operation
         except Exception as e:
             QMessageBox.critical(self, 'Error', f'Could not load subfolders:\n{str(e)}')
 
@@ -276,6 +279,8 @@ class ImageSorterApp(QMainWindow):
         else:
             QMessageBox.information(self, 'No Names', 'No folder names were entered.')
 
+        self.setFocus()  # Set focus back to window
+
     def toggle_mode(self):
         self.copy_mode = not self.copy_mode
         if self.copy_mode:
@@ -302,7 +307,11 @@ class ImageSorterApp(QMainWindow):
 
     def update_previews(self):
         if not self.images:
+            self.main_image_label.clear()
+            for lbl in self.secondary_labels:
+                lbl.clear()
             return
+
         img_path = os.path.join(self.current_folder, self.images[self.current_index])
         pix = QPixmap(img_path)
         self.main_image_label.setPixmap(pix.scaled(
@@ -319,6 +328,12 @@ class ImageSorterApp(QMainWindow):
                 lbl.clear()
 
     def keyPressEvent(self, event):
+        focused_widget = self.focusWidget()
+        if isinstance(focused_widget, QLineEdit):
+            # Let QLineEdit handle left/right for cursor movement
+            super().keyPressEvent(event)
+            return
+
         if not self.images:
             return super().keyPressEvent(event)
 
@@ -360,18 +375,24 @@ class ImageSorterApp(QMainWindow):
                 f'"{os.path.basename(src_path)}" already exists in "{target_name}".\nSkipped.')
             return
 
+        was_last_image = len(self.images) == 1
+
         try:
             if self.copy_mode:
                 shutil.copy2(src_path, dst_path)
             else:
                 shutil.move(src_path, dst_path)
                 del self.images[self.current_index]
-                self.current_index = min(self.current_index, len(self.images) - 1 if self.images else 0)
+                if self.images:
+                    self.current_index = min(self.current_index, len(self.images) - 1)
         except Exception as e:
             QMessageBox.critical(self, 'Error', str(e))
             return
 
         self.update_previews()
+
+        if not self.copy_mode and was_last_image:
+            QMessageBox.information(self, 'Done', 'No more images to preview.')
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

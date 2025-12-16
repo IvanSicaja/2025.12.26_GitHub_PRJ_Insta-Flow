@@ -4,7 +4,7 @@ import shutil
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QPushButton,
     QFileDialog, QHBoxLayout, QVBoxLayout, QLineEdit,
-    QMessageBox, QSpacerItem, QSizePolicy
+    QMessageBox, QSpacerItem, QSizePolicy, QScrollArea
 )
 from PyQt5.QtGui import QPixmap, QIcon
 from PyQt5.QtCore import Qt, QSettings
@@ -17,6 +17,7 @@ class ImageSorterApp(QMainWindow):
         self.setWindowTitle('InstaFlow')
         self.setWindowIcon(QIcon(r'..\assets\media\icons\icon.ico'))
         self.resize(1500, 900)
+        self.setMinimumSize(1400, 800)  # Prevent shrinking too much and breaking layout
         self.current_folder = None
         self.images = []
         self.current_index = 0
@@ -29,11 +30,21 @@ class ImageSorterApp(QMainWindow):
         main_widget = QWidget()
         self.setCentralWidget(main_widget)
         root_layout = QHBoxLayout(main_widget)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
 
-        # LEFT PANEL
-        left_panel = QVBoxLayout()
+        # LEFT PANEL - inside scroll area to handle small window heights
+        left_scroll = QScrollArea()
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        left_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        left_scroll.setStyleSheet('QScrollArea { background-color: #f8f8f8; border: none; }')
+
+        left_content = QWidget()
+        left_panel = QVBoxLayout(left_content)
         left_panel.setAlignment(Qt.AlignTop)
         left_panel.setSpacing(12)
+        left_panel.setContentsMargins(15, 15, 15, 15)
 
         # 1. Select folder
         lbl1 = QLabel('1. Select the folder containing images to sort:')
@@ -80,7 +91,7 @@ class ImageSorterApp(QMainWindow):
         self.mode_button.clicked.connect(self.toggle_mode)
         left_panel.addWidget(self.mode_button)
 
-        # 4. Target folders configuration - reduced font size to fit
+        # 4. Target folders configuration
         lbl_folders = QLabel('4. Configure target folders (press key 1–0 to sort):')
         lbl_folders.setStyleSheet('QLabel { font-weight: bold; color: #333; font-size: 10.5pt; margin-top: 20px; }')
         lbl_folders.setWordWrap(True)
@@ -91,7 +102,6 @@ class ImageSorterApp(QMainWindow):
         sub_header.setWordWrap(True)
         left_panel.addWidget(sub_header)
 
-        # Load existing subfolders button - now with same rounding as mode button
         self.load_folders_btn = QPushButton('Load Existing Subfolders (A-Z)')
         self.load_folders_btn.setFocusPolicy(Qt.NoFocus)
         self.load_folders_btn.setMinimumHeight(36)
@@ -149,7 +159,7 @@ class ImageSorterApp(QMainWindow):
 
             left_panel.addLayout(row)
 
-        # Create Folders button - same rounding as mode button
+        # Create Folders button
         self.create_folders_btn = QPushButton('Create Folders')
         self.create_folders_btn.setFocusPolicy(Qt.NoFocus)
         self.create_folders_btn.setMinimumHeight(40)
@@ -169,29 +179,37 @@ class ImageSorterApp(QMainWindow):
 
         left_panel.addSpacerItem(QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding))
 
-        left_container = QWidget()
-        left_container.setLayout(left_panel)
-        left_container.setFixedWidth(340)
-        left_container.setStyleSheet('QWidget { background-color: #f8f8f8; }')
-        root_layout.addWidget(left_container)
+        left_scroll.setWidget(left_content)
+        left_scroll.setFixedWidth(340)
+        root_layout.addWidget(left_scroll)
 
         # RIGHT PANEL (image previews)
         right_panel = QVBoxLayout()
+        right_panel.setContentsMargins(20, 20, 20, 20)
+        right_panel.setSpacing(10)
+
         self.main_image_label = QLabel()
         self.main_image_label.setAlignment(Qt.AlignCenter)
-        self.main_image_label.setStyleSheet('background-color: #222;')
-        right_panel.addWidget(self.main_image_label, 8)
+        self.main_image_label.setStyleSheet('background-color: #222; border: 2px solid #444;')
+        right_panel.addWidget(self.main_image_label, stretch=8)
 
+        # Secondary thumbnails - centered and aligned with main image edges
         self.secondary_layout = QHBoxLayout()
+        self.secondary_layout.setSpacing(10)
+        self.secondary_layout.addStretch(1)  # Push thumbnails to center
+
         self.secondary_labels = []
         for _ in range(5):
             lbl = QLabel()
             lbl.setFixedSize(120, 120)
             lbl.setAlignment(Qt.AlignCenter)
-            lbl.setStyleSheet('background-color: #444; border: 1px solid #555;')
+            lbl.setStyleSheet('background-color: #444; border: 1px solid #555; border-radius: 6px;')
             self.secondary_labels.append(lbl)
             self.secondary_layout.addWidget(lbl)
-        right_panel.addLayout(self.secondary_layout, 2)
+
+        self.secondary_layout.addStretch(1)  # Symmetric stretch on right
+
+        right_panel.addLayout(self.secondary_layout, stretch=2)
 
         right_container = QWidget()
         right_container.setLayout(right_panel)
@@ -218,7 +236,7 @@ class ImageSorterApp(QMainWindow):
 
         self.current_index = 0
         self.update_previews()
-        self.setFocus()  # Set focus back to window after dialog
+        self.setFocus()
 
     def load_existing_subfolders(self):
         if not self.current_folder:
@@ -230,13 +248,11 @@ class ImageSorterApp(QMainWindow):
             subfolders = [item for item in items if os.path.isdir(os.path.join(self.current_folder, item))]
             subfolders = sorted([f for f in subfolders if not f.startswith('.')], key=str.lower)
 
-            # Clear all inputs
             for edit, cb in zip(self.folder_inputs, self.folder_enabled):
                 edit.setText('')
                 edit.setEnabled(False)
                 cb.setChecked(False)
 
-            # Fill up to 10
             for i, name in enumerate(subfolders[:10]):
                 self.folder_inputs[i].setText(name)
                 self.folder_inputs[i].setEnabled(True)
@@ -247,7 +263,7 @@ class ImageSorterApp(QMainWindow):
                 f'Loaded {min(len(subfolders), 10)} existing subfolder(s) alphabetically.\n'
                 f'Total found: {len(subfolders)}'
             )
-            self.setFocus()  # Set focus back to window after operation
+            self.setFocus()
         except Exception as e:
             QMessageBox.critical(self, 'Error', f'Could not load subfolders:\n{str(e)}')
 
@@ -279,7 +295,7 @@ class ImageSorterApp(QMainWindow):
         else:
             QMessageBox.information(self, 'No Names', 'No folder names were entered.')
 
-        self.setFocus()  # Set focus back to window
+        self.setFocus()
 
     def toggle_mode(self):
         self.copy_mode = not self.copy_mode
@@ -330,7 +346,6 @@ class ImageSorterApp(QMainWindow):
     def keyPressEvent(self, event):
         focused_widget = self.focusWidget()
         if isinstance(focused_widget, QLineEdit):
-            # Let QLineEdit handle left/right for cursor movement
             super().keyPressEvent(event)
             return
 

@@ -32,7 +32,7 @@ class ImageSorterApp(QMainWindow):
         # LEFT PANEL
         left_panel = QVBoxLayout()
         left_panel.setAlignment(Qt.AlignTop)
-        left_panel.setSpacing(12)  # Reduced spacing for better fit
+        left_panel.setSpacing(12)
 
         # 1. Select folder
         lbl1 = QLabel('1. Select the folder containing images to sort:')
@@ -43,7 +43,16 @@ class ImageSorterApp(QMainWindow):
         self.open_btn = QPushButton('Open Folder')
         self.open_btn.setFocusPolicy(Qt.NoFocus)
         self.open_btn.setMinimumHeight(36)
-        self.open_btn.setStyleSheet('QPushButton { background-color: white; font-weight: bold; padding: 6px; }')
+        self.open_btn.setStyleSheet("""
+            QPushButton { 
+                background-color: white; 
+                font-weight: bold; 
+                padding: 6px; 
+                border: 2px solid #aaa; 
+                border-radius: 8px;
+            }
+            QPushButton:hover { background-color: #f8f8f8; }
+        """)
         self.open_btn.clicked.connect(self.open_folder)
         left_panel.addWidget(self.open_btn)
 
@@ -70,9 +79,10 @@ class ImageSorterApp(QMainWindow):
         self.mode_button.clicked.connect(self.toggle_mode)
         left_panel.addWidget(self.mode_button)
 
-        # 4. Target folders configuration
+        # 4. Target folders configuration - reduced font size to fit
         lbl_folders = QLabel('4. Configure target folders (press key 1–0 to sort):')
-        lbl_folders.setStyleSheet('QLabel { font-weight: bold; color: #333; font-size: 11pt; margin-top: 20px; }')
+        lbl_folders.setStyleSheet('QLabel { font-weight: bold; color: #333; font-size: 10.5pt; margin-top: 20px; }')
+        lbl_folders.setWordWrap(True)
         left_panel.addWidget(lbl_folders)
 
         sub_header = QLabel('Check ✎ to edit name · Only folders with names will be created')
@@ -80,7 +90,7 @@ class ImageSorterApp(QMainWindow):
         sub_header.setWordWrap(True)
         left_panel.addWidget(sub_header)
 
-        # Load existing subfolders button - white background, no rounding
+        # Load existing subfolders button - now with same rounding as mode button
         self.load_folders_btn = QPushButton('Load Existing Subfolders (A-Z)')
         self.load_folders_btn.setFocusPolicy(Qt.NoFocus)
         self.load_folders_btn.setMinimumHeight(36)
@@ -89,9 +99,10 @@ class ImageSorterApp(QMainWindow):
                 background-color: white; 
                 font-weight: bold; 
                 padding: 6px; 
-                border: 1px solid #ccc;
+                border: 2px solid #aaa;
+                border-radius: 8px;
             }
-            QPushButton:hover { background-color: #f5f5f5; }
+            QPushButton:hover { background-color: #f8f8f8; }
         """)
         self.load_folders_btn.clicked.connect(self.load_existing_subfolders)
         left_panel.addWidget(self.load_folders_btn)
@@ -99,7 +110,7 @@ class ImageSorterApp(QMainWindow):
         # 10 folder inputs
         self.folder_inputs = []
         self.folder_enabled = []
-        default_names = ['family', 'me', '', '', '', '', '', '', '', '']
+        default_names = ['Family Milestones', 'My Milestones', '', '', '', '', '', '', '', '']
 
         for i in range(10):
             row = QHBoxLayout()
@@ -115,8 +126,8 @@ class ImageSorterApp(QMainWindow):
             checkbox.setFixedWidth(36)
             checkbox.setStyleSheet("""
                 QPushButton { 
-                    border-radius: 6px; 
-                    border: 1px solid #aaa; 
+                    border-radius: 8px; 
+                    border: 2px solid #aaa; 
                     padding: 4px;
                 }
                 QPushButton:checked { background-color: #e0e0e0; }
@@ -127,7 +138,7 @@ class ImageSorterApp(QMainWindow):
 
             edit = QLineEdit(default_names[i])
             edit.setEnabled(False)
-            edit.setStyleSheet('QLineEdit { padding: 6px; }')
+            edit.setStyleSheet('QLineEdit { padding: 6px; border-radius: 6px; }')
             row.addWidget(edit)
 
             checkbox.toggled.connect(edit.setEnabled)
@@ -137,7 +148,7 @@ class ImageSorterApp(QMainWindow):
 
             left_panel.addLayout(row)
 
-        # Create Folders button - white, no rounding, at bottom
+        # Create Folders button - same rounding as mode button
         self.create_folders_btn = QPushButton('Create Folders')
         self.create_folders_btn.setFocusPolicy(Qt.NoFocus)
         self.create_folders_btn.setMinimumHeight(40)
@@ -146,10 +157,11 @@ class ImageSorterApp(QMainWindow):
                 background-color: white; 
                 font-weight: bold; 
                 padding: 10px; 
-                border: 1px solid #ccc;
+                border: 2px solid #aaa;
+                border-radius: 8px;
                 margin-top: 10px;
             }
-            QPushButton:hover { background-color: #f5f5f5; }
+            QPushButton:hover { background-color: #f8f8f8; }
         """)
         self.create_folders_btn.clicked.connect(self.create_folders)
         left_panel.addWidget(self.create_folders_btn)

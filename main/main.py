@@ -15,7 +15,7 @@ class ImageSorterApp(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle('Image Sorting Preview App')
-        self.resize(1400, 800)
+        self.resize(1500, 900)  # Slightly larger window for better visibility
         self.current_folder = None
         self.images = []
         self.current_index = 0
@@ -29,45 +29,78 @@ class ImageSorterApp(QMainWindow):
         self.setCentralWidget(main_widget)
         root_layout = QHBoxLayout(main_widget)
 
-        # LEFT PANEL (controls) - made wider for better readability
+        # LEFT PANEL - wider and with clear section instructions
         left_panel = QVBoxLayout()
         left_panel.setAlignment(Qt.AlignTop)
-        left_panel.setSpacing(12)
+        left_panel.setSpacing(16)
+
+        # Instruction above Open Folder
+        open_instruction = QLabel('1. Select the folder containing images to sort:')
+        open_instruction.setStyleSheet('QLabel { color: #444; font-size: 11pt; margin-top: 10px; }')
+        open_instruction.setWordWrap(True)
+        left_panel.addWidget(open_instruction)
 
         self.open_btn = QPushButton('Open Folder')
         self.open_btn.setFocusPolicy(Qt.NoFocus)
+        self.open_btn.setMinimumHeight(40)
+        self.open_btn.setStyleSheet("""
+            QPushButton {
+                border: 2px solid #aaa;
+                border-radius: 8px;
+                padding: 8px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #f0f0f0;
+            }
+        """)
         self.open_btn.clicked.connect(self.open_folder)
         left_panel.addWidget(self.open_btn)
 
-        # Mode toggle button - moved higher, more professional look
+        # Instruction above Mode button
+        mode_instruction = QLabel('2. Choose operation mode:')
+        mode_instruction.setStyleSheet('QLabel { color: #444; font-size: 11pt; margin-top: 20px; }')
+        left_panel.addWidget(mode_instruction)
+
         self.mode_button = QPushButton('Mode: COPY')
         self.mode_button.setCheckable(True)
         self.mode_button.setFocusPolicy(Qt.NoFocus)
-        self.mode_button.setMinimumHeight(40)
+        self.mode_button.setMinimumHeight(48)
         self.mode_button.clicked.connect(self.toggle_mode)
         left_panel.addWidget(self.mode_button)
 
-        # Create Folders button - now below mode button
+        # Create Folders button with rounded style
         self.create_folders_btn = QPushButton('Create Folders')
         self.create_folders_btn.setFocusPolicy(Qt.NoFocus)
-        self.create_folders_btn.setMinimumHeight(36)
+        self.create_folders_btn.setMinimumHeight(40)
+        self.create_folders_btn.setStyleSheet("""
+            QPushButton {
+                border: 2px solid #aaa;
+                border-radius: 8px;
+                padding: 8px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #f0f0f0;
+            }
+        """)
         self.create_folders_btn.clicked.connect(self.create_folders)
         left_panel.addWidget(self.create_folders_btn)
 
-        # Info label
-        info_label = QLabel('Use ← → arrows to navigate\nPress 1–0 keys to sort current image')
+        # General navigation info
+        info_label = QLabel('Navigate with ← → arrows\nSort current image with keys 1–0')
         info_label.setWordWrap(True)
-        info_label.setStyleSheet('QLabel { color: #666; font-size: 11pt; }')
+        info_label.setStyleSheet('QLabel { color: #666; font-size: 12pt; margin-top: 20px; }')
         left_panel.addWidget(info_label)
 
-        # Section header for folder configuration
-        header_label = QLabel('Target Folders (press key to sort to folder):')
-        header_label.setStyleSheet('QLabel { font-weight: bold; color: #333; margin-top: 20px; }')
+        # Folder configuration section
+        header_label = QLabel('3. Configure target folders (press key to sort to folder):')
+        header_label.setStyleSheet('QLabel { font-weight: bold; color: #333; font-size: 12pt; margin-top: 20px; }')
         left_panel.addWidget(header_label)
 
-        sub_header = QLabel('Check ✎ to set custom folder name (only named folders will be created):')
+        sub_header = QLabel('Check ✎ to edit folder name · Only folders with names will be created')
         sub_header.setWordWrap(True)
-        sub_header.setStyleSheet('QLabel { color: #555; font-size: 10pt; }')
+        sub_header.setStyleSheet('QLabel { color: #555; font-size: 11pt; }')
         left_panel.addWidget(sub_header)
 
         # 10 folder inputs
@@ -78,21 +111,22 @@ class ImageSorterApp(QMainWindow):
         for i in range(10):
             row = QHBoxLayout()
 
-            key_label = QLabel(str((i + 1) % 10))  # 1 to 0 (0 for 10th)
-            key_label.setFixedWidth(25)
+            key_label = QLabel(str((i + 1) % 10))  # 1–9, 0 for 10th
+            key_label.setFixedWidth(30)
             key_label.setAlignment(Qt.AlignCenter)
-            key_label.setStyleSheet('QLabel { font-weight: bold; }')
+            key_label.setStyleSheet('QLabel { font-weight: bold; font-size: 12pt; }')
             row.addWidget(key_label)
 
             checkbox = QPushButton('✎')
             checkbox.setCheckable(True)
-            checkbox.setFixedWidth(36)
+            checkbox.setFixedWidth(40)
             checkbox.setToolTip('Enable editing of folder name')
             checkbox.setFocusPolicy(Qt.NoFocus)
             row.addWidget(checkbox)
 
             edit = QLineEdit(default_names[i])
             edit.setEnabled(False)
+            edit.setMinimumWidth(180)
             row.addWidget(edit)
 
             checkbox.toggled.connect(edit.setEnabled)
@@ -106,7 +140,7 @@ class ImageSorterApp(QMainWindow):
 
         left_container = QWidget()
         left_container.setLayout(left_panel)
-        left_container.setFixedWidth(240)  # Wider panel for better text visibility
+        left_container.setFixedWidth(320)  # Much wider for full text visibility
         left_container.setStyleSheet('QWidget { background-color: #f8f8f8; }')
         root_layout.addWidget(left_container)
 
@@ -160,16 +194,30 @@ class ImageSorterApp(QMainWindow):
         if not self.current_folder:
             return
 
-        created = False
+        created_count = 0
+        already_exists_count = 0
+        empty_count = 0
+
         for edit in self.folder_inputs:
             name = edit.text().strip()
-            if name:  # Only create if name is not empty
-                path = os.path.join(self.current_folder, name)
-                os.makedirs(path, exist_ok=True)
-                created = True
+            if not name:
+                empty_count += 1
+                continue
 
-        if created:
-            QMessageBox.information(self, 'Folders Created', 'Selected target folders have been created.')
+            path = os.path.join(self.current_folder, name)
+            if os.path.exists(path):
+                already_exists_count += 1
+            else:
+                os.makedirs(path, exist_ok=True)
+                created_count += 1
+
+        if created_count > 0:
+            msg = f'{created_count} folder(s) created successfully.'
+            if already_exists_count > 0:
+                msg += f'\n{already_exists_count} folder(s) already exist and were skipped.'
+            QMessageBox.information(self, 'Folders Created', msg)
+        elif already_exists_count > 0:
+            QMessageBox.information(self, 'Folders Exist', 'All specified folders already exist.')
         else:
             QMessageBox.information(self, 'No Folders', 'No folder names were provided.')
 
@@ -178,12 +226,12 @@ class ImageSorterApp(QMainWindow):
         if self.copy_mode:
             self.mode_button.setText('Mode: COPY')
         else:
-            self.mode_button.setText('Mode: MOVE ⚠️')
+            self.mode_button.setText('Mode: MOVE')  # Removed ⚠️ icon
         self.update_mode_button_style()
 
     def update_mode_button_style(self):
         if self.copy_mode:
-            # Professional, calm, eye-friendly blue-green (safe mode)
+            # Calm, safe green (kept as-is – you said it's great)
             self.mode_button.setStyleSheet("""
                 QPushButton {
                     background-color: #e6f4ea;
@@ -195,13 +243,13 @@ class ImageSorterApp(QMainWindow):
                 }
             """)
         else:
-            # Strong caution: soft red/orange tone, very visible but not harsh
+            # Yellow/orange caution tone for MOVE – visible but comfortable
             self.mode_button.setStyleSheet("""
                 QPushButton {
-                    background-color: #ffebee;
-                    color: #c62828;
+                    background-color: #fff8e1;
+                    color: #e65100;
                     font-weight: bold;
-                    border: 2px solid #e57373;
+                    border: 2px solid #ffca28;
                     border-radius: 8px;
                     padding: 8px;
                 }
@@ -242,7 +290,6 @@ class ImageSorterApp(QMainWindow):
             event.accept()
             return
 
-        # Support keys 1–9 and 0 for 10th folder
         if Qt.Key_1 <= key <= Qt.Key_9:
             folder_idx = key - Qt.Key_1
             self.handle_sort(folder_idx)

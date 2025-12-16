@@ -17,7 +17,7 @@ class ImageSorterApp(QMainWindow):
         self.setWindowTitle('InstaFlow')
         self.setWindowIcon(QIcon(r'..\assets\media\icons\icon.ico'))
         self.resize(1500, 900)
-        self.setMinimumSize(1400, 800)  # Prevent shrinking too much and breaking layout
+        self.setMinimumSize(1400, 800)
         self.current_folder = None
         self.images = []
         self.current_index = 0
@@ -33,7 +33,7 @@ class ImageSorterApp(QMainWindow):
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
 
-        # LEFT PANEL - inside scroll area to handle small window heights
+        # LEFT PANEL - scrollable
         left_scroll = QScrollArea()
         left_scroll.setWidgetResizable(True)
         left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -193,10 +193,9 @@ class ImageSorterApp(QMainWindow):
         self.main_image_label.setStyleSheet('background-color: #222; border: 2px solid #444;')
         right_panel.addWidget(self.main_image_label, stretch=8)
 
-        # Secondary thumbnails - centered and aligned with main image edges
         self.secondary_layout = QHBoxLayout()
         self.secondary_layout.setSpacing(10)
-        self.secondary_layout.addStretch(1)  # Push thumbnails to center
+        self.secondary_layout.addStretch(1)
 
         self.secondary_labels = []
         for _ in range(5):
@@ -207,13 +206,16 @@ class ImageSorterApp(QMainWindow):
             self.secondary_labels.append(lbl)
             self.secondary_layout.addWidget(lbl)
 
-        self.secondary_layout.addStretch(1)  # Symmetric stretch on right
+        self.secondary_layout.addStretch(1)
 
         right_panel.addLayout(self.secondary_layout, stretch=2)
 
         right_container = QWidget()
         right_container.setLayout(right_panel)
         root_layout.addWidget(right_container, 1)
+
+        # Make the right preview area focusable so arrows work when clicking there
+        right_container.setFocusPolicy(Qt.StrongFocus)
 
     def open_folder(self):
         last_folder = self.settings.value('last_folder', '')
@@ -236,7 +238,7 @@ class ImageSorterApp(QMainWindow):
 
         self.current_index = 0
         self.update_previews()
-        self.setFocus()
+        self.centralWidget().setFocus()  # Return focus to main area
 
     def load_existing_subfolders(self):
         if not self.current_folder:
@@ -263,7 +265,7 @@ class ImageSorterApp(QMainWindow):
                 f'Loaded {min(len(subfolders), 10)} existing subfolder(s) alphabetically.\n'
                 f'Total found: {len(subfolders)}'
             )
-            self.setFocus()
+            self.centralWidget().setFocus()
         except Exception as e:
             QMessageBox.critical(self, 'Error', f'Could not load subfolders:\n{str(e)}')
 
@@ -295,7 +297,7 @@ class ImageSorterApp(QMainWindow):
         else:
             QMessageBox.information(self, 'No Names', 'No folder names were entered.')
 
-        self.setFocus()
+        self.centralWidget().setFocus()
 
     def toggle_mode(self):
         self.copy_mode = not self.copy_mode
@@ -304,6 +306,7 @@ class ImageSorterApp(QMainWindow):
         else:
             self.mode_button.setText('Mode: MOVE')
         self.update_mode_button_style()
+        self.centralWidget().setFocus()  # Return arrow control after clicking mode
 
     def update_mode_button_style(self):
         if self.copy_mode:
@@ -344,32 +347,32 @@ class ImageSorterApp(QMainWindow):
                 lbl.clear()
 
     def keyPressEvent(self, event):
-        focused_widget = self.focusWidget()
-        if isinstance(focused_widget, QLineEdit):
+        # Only allow normal arrow cursor movement inside QLineEdit
+        if isinstance(self.focusWidget(), QLineEdit):
             super().keyPressEvent(event)
             return
 
         if not self.images:
-            return super().keyPressEvent(event)
+            super().keyPressEvent(event)
+            return
 
         key = event.key()
         if key == Qt.Key_Right:
             self.current_index = min(self.current_index + 1, len(self.images) - 1)
             self.update_previews()
             event.accept()
-            return
         elif key == Qt.Key_Left:
             self.current_index = max(self.current_index - 1, 0)
             self.update_previews()
             event.accept()
-            return
-
-        if Qt.Key_1 <= key <= Qt.Key_9:
+        elif Qt.Key_1 <= key <= Qt.Key_9:
             self.handle_sort(key - Qt.Key_1)
             event.accept()
         elif key == Qt.Key_0:
             self.handle_sort(9)
             event.accept()
+        else:
+            super().keyPressEvent(event)
 
     def handle_sort(self, folder_idx):
         if folder_idx >= len(self.folder_inputs):
@@ -408,6 +411,8 @@ class ImageSorterApp(QMainWindow):
 
         if not self.copy_mode and was_last_image:
             QMessageBox.information(self, 'Done', 'No more images to preview.')
+
+        self.centralWidget().setFocus()  # Ensure arrows work again after sorting
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

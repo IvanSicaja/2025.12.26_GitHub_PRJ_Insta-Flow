@@ -104,21 +104,51 @@ class ImageSorterApp(QMainWindow):
         lbl_folders.setWordWrap(True)
         left_panel.addWidget(lbl_folders)
 
-        sub_header = QLabel('Check ✎ to edit name · Only folders with names will be created')
-        sub_header.setStyleSheet('QLabel { color: #555; font-size: 10pt; }')
-        sub_header.setWordWrap(True)
-        left_panel.addWidget(sub_header)
+        # --- Target base folder: use-same-as-step-1 toggle + custom picker ---
+        # Divider line
+        divider = QLabel()
+        divider.setFixedHeight(1)
+        divider.setStyleSheet('background-color: #ddd; margin: 2px 0px;')
+        left_panel.addWidget(divider)
 
-        # --- NEW: Target base folder selector ---
-        lbl_target = QLabel('Target base folder (where subfolders are created):')
-        lbl_target.setStyleSheet('QLabel { color: #444; font-size: 9.5pt; margin-top: 4px; }')
-        lbl_target.setWordWrap(True)
-        left_panel.addWidget(lbl_target)
+        lbl_target_header = QLabel('Sort destination folder:')
+        lbl_target_header.setStyleSheet('QLabel { color: #333; font-size: 10pt; font-weight: bold; margin-top: 4px; }')
+        left_panel.addWidget(lbl_target_header)
+
+        # Toggle button: "Use same folder as Step 1"
+        self.use_source_btn = QPushButton('✔  Use same folder as Step 1 (source)')
+        self.use_source_btn.setCheckable(True)
+        self.use_source_btn.setChecked(True)   # default: use source
+        self.use_source_btn.setFocusPolicy(Qt.NoFocus)
+        self.use_source_btn.setMinimumHeight(38)
+        self.use_source_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #e6f4ea; color: #2d6a4f; font-weight: bold;
+                border: 2px solid #95d5b2; border-radius: 8px; padding: 6px 10px;
+                text-align: left;
+            }
+            QPushButton:!checked {
+                background-color: #f0f0f0; color: #888;
+                border: 2px solid #ccc;
+            }
+        """)
+        self.use_source_btn.clicked.connect(self.on_use_source_toggled)
+        left_panel.addWidget(self.use_source_btn)
+
+        # Custom target folder row (shown when toggle is OFF)
+        self.custom_target_widget = QWidget()
+        custom_target_layout = QVBoxLayout(self.custom_target_widget)
+        custom_target_layout.setContentsMargins(0, 4, 0, 0)
+        custom_target_layout.setSpacing(4)
+
+        lbl_custom = QLabel('Custom target folder:')
+        lbl_custom.setStyleSheet('QLabel { color: #444; font-size: 9.5pt; }')
+        custom_target_layout.addWidget(lbl_custom)
 
         target_row = QHBoxLayout()
 
         self.target_folder_display = QLineEdit()
-        self.target_folder_display.setPlaceholderText('Same as source folder (Step 1)')
+        self.target_folder_display.setPlaceholderText('No folder selected — click 📁 to choose')
         self.target_folder_display.setReadOnly(True)
         self.target_folder_display.setStyleSheet("""
             QLineEdit { 
@@ -136,7 +166,7 @@ class ImageSorterApp(QMainWindow):
         self.select_target_btn.setFocusPolicy(Qt.NoFocus)
         self.select_target_btn.setFixedWidth(36)
         self.select_target_btn.setMinimumHeight(32)
-        self.select_target_btn.setToolTip('Select target base folder')
+        self.select_target_btn.setToolTip('Select custom target base folder')
         self.select_target_btn.setStyleSheet("""
             QPushButton { 
                 background-color: white; 
@@ -154,7 +184,7 @@ class ImageSorterApp(QMainWindow):
         self.clear_target_btn.setFocusPolicy(Qt.NoFocus)
         self.clear_target_btn.setFixedWidth(36)
         self.clear_target_btn.setMinimumHeight(32)
-        self.clear_target_btn.setToolTip('Reset to source folder')
+        self.clear_target_btn.setToolTip('Clear custom folder selection')
         self.clear_target_btn.setStyleSheet("""
             QPushButton { 
                 background-color: white; 
@@ -168,14 +198,27 @@ class ImageSorterApp(QMainWindow):
         self.clear_target_btn.clicked.connect(self.clear_target_folder)
         target_row.addWidget(self.clear_target_btn)
 
-        left_panel.addLayout(target_row)
+        custom_target_layout.addLayout(target_row)
 
-        # Target folder status label
-        self.target_status_label = QLabel('ℹ️ Using source folder as target')
-        self.target_status_label.setStyleSheet('QLabel { color: #888; font-size: 9pt; font-style: italic; margin-bottom: 4px; }')
+        self.target_status_label = QLabel('')
+        self.target_status_label.setStyleSheet('QLabel { color: #c0392b; font-size: 9pt; font-style: italic; }')
         self.target_status_label.setWordWrap(True)
-        left_panel.addWidget(self.target_status_label)
-        # --- END NEW ---
+        custom_target_layout.addWidget(self.target_status_label)
+
+        self.custom_target_widget.setVisible(False)   # hidden by default (source mode active)
+        left_panel.addWidget(self.custom_target_widget)
+
+        divider2 = QLabel()
+        divider2.setFixedHeight(1)
+        divider2.setStyleSheet('background-color: #ddd; margin: 4px 0px;')
+        left_panel.addWidget(divider2)
+        # --- END target folder block ---
+
+        # Sub-header and load button (below target folder selection)
+        sub_header = QLabel('Check ✎ to edit name · Only folders with names will be created')
+        sub_header.setStyleSheet('QLabel { color: #555; font-size: 10pt; }')
+        sub_header.setWordWrap(True)
+        left_panel.addWidget(sub_header)
 
         self.load_folders_btn = QPushButton('Load Existing Subfolders (A-Z)')
         self.load_folders_btn.setFocusPolicy(Qt.NoFocus)
@@ -293,7 +336,28 @@ class ImageSorterApp(QMainWindow):
         right_container.mousePressEvent = lambda e: right_container.setFocus()
         root_layout.addWidget(right_container, 1)
 
-    # --- NEW: Target folder methods ---
+    # --- Target folder methods ---
+
+    def on_use_source_toggled(self):
+        using_source = self.use_source_btn.isChecked()
+        if using_source:
+            # Switched back to "use source" — hide custom widget, clear custom folder
+            self.use_source_btn.setText('✔  Use same folder as Step 1 (source)')
+            self.custom_target_widget.setVisible(False)
+            self.target_base_folder = None
+            self.settings.remove('last_target_folder')
+        else:
+            # Switched to custom — show the picker area and open browser immediately
+            self.use_source_btn.setText('☐  Use same folder as Step 1 (source)')
+            self.custom_target_widget.setVisible(True)
+            # Auto-open folder browser
+            self.select_target_folder()
+            # If user cancelled the dialog, revert toggle back to "use source"
+            if not self.target_base_folder:
+                self.use_source_btn.setChecked(True)
+                self.use_source_btn.setText('✔  Use same folder as Step 1 (source)')
+                self.custom_target_widget.setVisible(False)
+        self.centralWidget().setFocus()
 
     def select_target_folder(self):
         last_target = self.settings.value('last_target_folder', '')
@@ -306,13 +370,11 @@ class ImageSorterApp(QMainWindow):
         self.target_base_folder = folder
         self.settings.setValue('last_target_folder', folder)
 
-        # Show shortened path if too long
-        display_path = folder
-        self.target_folder_display.setText(display_path)
-        self.target_folder_display.setToolTip(display_path)
-        self.target_status_label.setText(f'✅ Target: {os.path.basename(folder)}')
+        self.target_folder_display.setText(folder)
+        self.target_folder_display.setToolTip(folder)
+        self.target_status_label.setText(f'✅ Target set: {os.path.basename(folder)}')
         self.target_status_label.setStyleSheet(
-            'QLabel { color: #2d6a4f; font-size: 9pt; font-style: italic; margin-bottom: 4px; }'
+            'QLabel { color: #2d6a4f; font-size: 9pt; font-style: italic; }'
         )
         self.centralWidget().setFocus()
 
@@ -321,9 +383,9 @@ class ImageSorterApp(QMainWindow):
         self.settings.remove('last_target_folder')
         self.target_folder_display.clear()
         self.target_folder_display.setToolTip('')
-        self.target_status_label.setText('ℹ️ Using source folder as target')
+        self.target_status_label.setText('⚠ No folder selected — images will not be sorted until a folder is chosen.')
         self.target_status_label.setStyleSheet(
-            'QLabel { color: #888; font-size: 9pt; font-style: italic; margin-bottom: 4px; }'
+            'QLabel { color: #c0392b; font-size: 9pt; font-style: italic; }'
         )
         self.centralWidget().setFocus()
 
@@ -333,18 +395,17 @@ class ImageSorterApp(QMainWindow):
             return self.target_base_folder
         return self.current_folder
 
-    def write_log_entry(self, target_subfolder_path, image_dst_path):
+    def write_log_entry(self, target_base, subfolder_name, image_src_path, image_dst_path):
         """
-        Write/update the activity log inside target_subfolder_path.
-        Keeps a maximum of MAX_LOG_ENTRIES entries.
-        Each entry: timestamp + full destination path.
-        Newest entry is always at the top.
+        Write/update ONE activity log file in the root target base folder.
+        Format per line: [YYYY-MM-DD HH:MM:SS] COPY/MOVE | subfolder_name | original_source_path
+        Keeps a maximum of MAX_LOG_ENTRIES entries, newest first.
         """
-        log_path = os.path.join(target_subfolder_path, LOG_FILENAME)
+        log_path = os.path.join(target_base, LOG_FILENAME)
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        new_entry = f'[{timestamp}] {image_dst_path}'
+        operation = 'COPY' if self.copy_mode else 'MOVE'
+        new_entry = f'[{timestamp}] {operation} | {subfolder_name} | {image_src_path}'
 
-        # Read existing entries
         existing_entries = []
         if os.path.exists(log_path):
             try:
@@ -356,7 +417,6 @@ class ImageSorterApp(QMainWindow):
             except Exception:
                 existing_entries = []
 
-        # Prepend new entry, keep only MAX_LOG_ENTRIES
         updated_entries = [new_entry] + existing_entries
         updated_entries = updated_entries[:MAX_LOG_ENTRIES]
 
@@ -364,10 +424,9 @@ class ImageSorterApp(QMainWindow):
             with open(log_path, 'w', encoding='utf-8') as f:
                 f.write('\n'.join(updated_entries) + '\n')
         except Exception as e:
-            # Non-critical: don't interrupt the main workflow
             print(f'Warning: could not write log file: {e}')
 
-    # --- END NEW ---
+    # --- END target folder methods ---
 
     def on_pencil_clicked(self):
         self.centralWidget().setFocus()
@@ -570,8 +629,8 @@ class ImageSorterApp(QMainWindow):
             QMessageBox.critical(self, 'Error', str(e))
             return
 
-        # Write activity log entry into the target subfolder
-        self.write_log_entry(target_folder, dst_path)
+        # Write activity log entry into the root target base folder
+        self.write_log_entry(target_base, target_name, src_path, dst_path)
 
         self.update_previews()
 
@@ -584,5 +643,5 @@ class ImageSorterApp(QMainWindow):
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     window = ImageSorterApp()
-    window.show()
+    window.showMaximized()
     sys.exit(app.exec_())

@@ -211,48 +211,39 @@ class ImageSorterApp(QMainWindow):
         self.load_folders_btn.clicked.connect(self.load_existing_subfolders)
         left_panel.addWidget(self.load_folders_btn)
 
-        # 10 folder inputs
+        # Folder key-pair rows (dynamic)
         self.folder_inputs = []
         self.folder_enabled = []
+        self.folder_rows_widgets = []  # list of QWidget (each full row)
+
+        # Container widget whose layout holds the rows
+        self.folder_rows_container = QWidget()
+        self.folder_rows_layout = QVBoxLayout(self.folder_rows_container)
+        self.folder_rows_layout.setContentsMargins(0, 0, 0, 0)
+        self.folder_rows_layout.setSpacing(4)
+        left_panel.addWidget(self.folder_rows_container)
+
         default_names = ['Family Milestones', 'My Milestones', '', '', '', '', '', '', '', '']
-
         for i in range(10):
-            row = QHBoxLayout()
+            self._add_folder_row(default_names[i])
 
-            key_label = QLabel(str((i + 1) % 10))
-            key_label.setFixedWidth(28)
-            key_label.setAlignment(Qt.AlignCenter)
-            key_label.setStyleSheet('QLabel { font-weight: bold; font-size: 11pt; }')
-            row.addWidget(key_label)
-
-            checkbox = QPushButton('✎')
-            checkbox.setCheckable(True)
-            checkbox.setFixedWidth(36)
-            checkbox.setStyleSheet("""
-                QPushButton { 
-                    border-radius: 8px; 
-                    border: 2px solid #aaa; 
-                    padding: 4px;
-                }
-                QPushButton:checked { background-color: #e0e0e0; }
-            """)
-            checkbox.setToolTip('Enable editing of folder name')
-            checkbox.setFocusPolicy(Qt.NoFocus)
-            checkbox.clicked.connect(self.on_pencil_clicked)
-            row.addWidget(checkbox)
-
-            edit = QLineEdit(default_names[i])
-            edit.setEnabled(False)
-            edit.setStyleSheet('QLineEdit { padding: 6px; border-radius: 6px; }')
-            edit.focusInEvent = lambda e: QLineEdit.focusInEvent(edit, e)
-            row.addWidget(edit)
-
-            checkbox.toggled.connect(edit.setEnabled)
-
-            self.folder_inputs.append(edit)
-            self.folder_enabled.append(checkbox)
-
-            left_panel.addLayout(row)
+        # "+" button to add more rows
+        self.add_row_btn = QPushButton('＋  Add another key–folder pair')
+        self.add_row_btn.setFocusPolicy(Qt.NoFocus)
+        self.add_row_btn.setMinimumHeight(34)
+        self.add_row_btn.setStyleSheet("""
+            QPushButton {
+                background-color: white;
+                font-size: 9.5pt;
+                border: 2px dashed #aaa;
+                border-radius: 8px;
+                padding: 4px;
+                color: #555;
+            }
+            QPushButton:hover { background-color: #f0f0f0; border-color: #888; }
+        """)
+        self.add_row_btn.clicked.connect(self._on_add_row)
+        left_panel.addWidget(self.add_row_btn)
 
         # Create Folders button
         self.create_folders_btn = QPushButton('Create Folders')
@@ -455,6 +446,139 @@ class ImageSorterApp(QMainWindow):
 
     # --- END target folder methods ---
 
+    # --- Dynamic folder-row helpers ---
+
+    # Fixed key sequence: 1-9, 0, then a-z
+    KEY_SEQUENCE = (
+        [str(i) for i in range(1, 10)] + ['0'] +
+        [chr(c) for c in range(ord('a'), ord('z') + 1)]
+    )
+
+    def _get_key_label_for(self, index):
+        if index < len(self.KEY_SEQUENCE):
+            return self.KEY_SEQUENCE[index]
+        return '?'
+
+    def _add_folder_row(self, default_name=''):
+        idx = len(self.folder_inputs)
+        row_widget = QWidget()
+        row_widget.setFixedHeight(36)
+        row = QHBoxLayout(row_widget)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(3)
+
+        # Key label (fixed, shows assigned key)
+        key_label = QLabel(self._get_key_label_for(idx))
+        key_label.setFixedWidth(22)
+        key_label.setAlignment(Qt.AlignCenter)
+        key_label.setStyleSheet('QLabel { font-weight: bold; font-size: 10pt; color: #333; }')
+        row.addWidget(key_label)
+
+        # Pencil toggle
+        pencil_btn = QPushButton('✎')
+        pencil_btn.setCheckable(True)
+        pencil_btn.setFixedWidth(30)
+        pencil_btn.setFixedHeight(30)
+        pencil_btn.setStyleSheet("""
+            QPushButton { border-radius: 6px; border: 2px solid #aaa; padding: 2px; font-size: 9pt; }
+            QPushButton:checked { background-color: #e0e0e0; }
+        """)
+        pencil_btn.setToolTip('Enable editing of folder name')
+        pencil_btn.setFocusPolicy(Qt.NoFocus)
+        pencil_btn.clicked.connect(self.on_pencil_clicked)
+        row.addWidget(pencil_btn)
+
+        # Folder name edit
+        edit = QLineEdit(default_name)
+        edit.setEnabled(False)
+        edit.setFixedHeight(30)
+        edit.setStyleSheet('QLineEdit { padding: 4px; border-radius: 6px; font-size: 9pt; }')
+        row.addWidget(edit)
+
+        pencil_btn.toggled.connect(edit.setEnabled)
+
+        # Up button
+        up_btn = QPushButton('▲')
+        up_btn.setFixedWidth(24)
+        up_btn.setFixedHeight(30)
+        up_btn.setFocusPolicy(Qt.NoFocus)
+        up_btn.setToolTip('Move up')
+        up_btn.setStyleSheet("""
+            QPushButton { border-radius: 5px; border: 1px solid #ccc; font-size: 7pt; background: white; padding: 0px; }
+            QPushButton:hover { background-color: #e8e8e8; }
+        """)
+        up_btn.clicked.connect(lambda _, w=row_widget: self._move_row_up(w))
+        row.addWidget(up_btn)
+
+        # Down button
+        dn_btn = QPushButton('▼')
+        dn_btn.setFixedWidth(24)
+        dn_btn.setFixedHeight(30)
+        dn_btn.setFocusPolicy(Qt.NoFocus)
+        dn_btn.setToolTip('Move down')
+        dn_btn.setStyleSheet("""
+            QPushButton { border-radius: 5px; border: 1px solid #ccc; font-size: 7pt; background: white; padding: 0px; }
+            QPushButton:hover { background-color: #e8e8e8; }
+        """)
+        dn_btn.clicked.connect(lambda _, w=row_widget: self._move_row_dn(w))
+        row.addWidget(dn_btn)
+
+        self.folder_inputs.append(edit)
+        self.folder_enabled.append(pencil_btn)
+        self.folder_rows_widgets.append(row_widget)
+        self.folder_rows_layout.addWidget(row_widget)
+
+    def _refresh_key_labels(self):
+        """After any reorder, update the key label in each row to match its new position."""
+        for i, row_widget in enumerate(self.folder_rows_widgets):
+            # Key label is the first widget in the row's layout
+            lbl = row_widget.layout().itemAt(0).widget()
+            if isinstance(lbl, QLabel):
+                lbl.setText(self._get_key_label_for(i))
+
+    def _move_row_up(self, row_widget):
+        idx = self.folder_rows_widgets.index(row_widget)
+        if idx == 0:
+            return
+        # Swap in all tracking lists
+        self.folder_rows_widgets[idx], self.folder_rows_widgets[idx - 1] = \
+            self.folder_rows_widgets[idx - 1], self.folder_rows_widgets[idx]
+        self.folder_inputs[idx], self.folder_inputs[idx - 1] = \
+            self.folder_inputs[idx - 1], self.folder_inputs[idx]
+        self.folder_enabled[idx], self.folder_enabled[idx - 1] = \
+            self.folder_enabled[idx - 1], self.folder_enabled[idx]
+        # Rebuild layout order
+        for w in self.folder_rows_widgets:
+            self.folder_rows_layout.removeWidget(w)
+        for w in self.folder_rows_widgets:
+            self.folder_rows_layout.addWidget(w)
+        self._refresh_key_labels()
+        self.centralWidget().setFocus()
+
+    def _move_row_dn(self, row_widget):
+        idx = self.folder_rows_widgets.index(row_widget)
+        if idx >= len(self.folder_rows_widgets) - 1:
+            return
+        self.folder_rows_widgets[idx], self.folder_rows_widgets[idx + 1] = \
+            self.folder_rows_widgets[idx + 1], self.folder_rows_widgets[idx]
+        self.folder_inputs[idx], self.folder_inputs[idx + 1] = \
+            self.folder_inputs[idx + 1], self.folder_inputs[idx]
+        self.folder_enabled[idx], self.folder_enabled[idx + 1] = \
+            self.folder_enabled[idx + 1], self.folder_enabled[idx]
+        for w in self.folder_rows_widgets:
+            self.folder_rows_layout.removeWidget(w)
+        for w in self.folder_rows_widgets:
+            self.folder_rows_layout.addWidget(w)
+        self._refresh_key_labels()
+        self.centralWidget().setFocus()
+
+    def _on_add_row(self):
+        self._add_folder_row('')
+        self._refresh_key_labels()
+        self.centralWidget().setFocus()
+
+    # --- END dynamic folder-row helpers ---
+
     def on_pencil_clicked(self):
         self.centralWidget().setFocus()
 
@@ -613,18 +737,38 @@ class ImageSorterApp(QMainWindow):
             self.current_index = min(self.current_index + 1, len(self.images) - 1)
             self.update_previews()
             event.accept()
+            return
         elif key == Qt.Key_Left:
             self.current_index = max(self.current_index - 1, 0)
             self.update_previews()
             event.accept()
-        elif Qt.Key_1 <= key <= Qt.Key_9:
-            self.handle_sort(key - Qt.Key_1)
-            event.accept()
-        elif key == Qt.Key_0:
-            self.handle_sort(9)
-            event.accept()
-        else:
+            return
+
+        # Don't trigger sort keys when a QLineEdit has focus
+        if isinstance(self.focusWidget(), QLineEdit):
             super().keyPressEvent(event)
+            return
+
+        # Map key to folder index using KEY_SEQUENCE
+        # Keys 1-9 → index 0-8, Key_0 → index 9, letters a-z → index 10-35
+        key_char = None
+        if Qt.Key_1 <= key <= Qt.Key_9:
+            key_char = str(key - Qt.Key_0)
+        elif key == Qt.Key_0:
+            key_char = '0'
+        elif Qt.Key_A <= key <= Qt.Key_Z:
+            key_char = chr(key).lower()
+
+        if key_char is not None:
+            try:
+                idx = self.KEY_SEQUENCE.index(key_char)
+                self.handle_sort(idx)
+                event.accept()
+                return
+            except ValueError:
+                pass
+
+        super().keyPressEvent(event)
 
     def handle_sort(self, folder_idx):
         if folder_idx >= len(self.folder_inputs):

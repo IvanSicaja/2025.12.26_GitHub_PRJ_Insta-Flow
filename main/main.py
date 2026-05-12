@@ -27,6 +27,7 @@ class ImageSorterApp(QMainWindow):
         self.images = []
         self.current_index = 0
         self.copy_mode = True  # True = Copy, False = Move
+        self.folder_keys = []  # parallel to folder_inputs: custom key strings per row
         self.settings = QSettings('ImageSorterApp', 'Settings')
         self._build_ui()
         self.update_mode_button_style()
@@ -111,7 +112,7 @@ class ImageSorterApp(QMainWindow):
         left_panel.addWidget(divider)
 
         lbl_target_header = QLabel('Sort destination folder:')
-        lbl_target_header.setStyleSheet('QLabel { color: #333; font-size: 10pt; font-weight: bold; margin-top: 4px; }')
+        lbl_target_header.setStyleSheet('QLabel { color: #444; font-size: 10pt; margin-top: 4px; }')
         left_panel.addWidget(lbl_target_header)
 
         lbl_target_desc = QLabel(
@@ -214,6 +215,7 @@ class ImageSorterApp(QMainWindow):
         # Folder key-pair rows (dynamic)
         self.folder_inputs = []
         self.folder_enabled = []
+        self.folder_keys = []
         self.folder_rows_widgets = []  # list of QWidget (each full row)
 
         # Container widget whose layout holds the rows
@@ -320,45 +322,57 @@ class ImageSorterApp(QMainWindow):
         right_panel.addLayout(self.secondary_layout, stretch=2)
 
         # Two-line info bar at the bottom (current image name + last operation)
-        # Both bars share the same left padding so filenames align perfectly.
-        LPAD = 10          # left padding inside each bar
-        PREFIX_W = 68      # pixel width reserved for the operation prefix ("COPIED  " / "MOVED   ")
+        BAR_STYLE = 'background-color: {bg}; border-radius: 0px;'
+        TEXT_CSS  = 'color: #ccc; font-size: 9pt; background: transparent;'
 
-        # --- Bar 1: current image name ---
+        # --- Bar 1: currently displayed image name ---
         cur_bar = QWidget()
-        cur_bar.setStyleSheet('background-color: #222; border-radius: 6px 6px 0px 0px;')
+        cur_bar.setStyleSheet(BAR_STYLE.format(bg='#1e1e1e'))
         cur_bar.setFixedHeight(26)
         cur_bar_layout = QHBoxLayout(cur_bar)
-        cur_bar_layout.setContentsMargins(LPAD, 0, LPAD, 0)
+        cur_bar_layout.setContentsMargins(10, 0, 10, 0)
         cur_bar_layout.setSpacing(0)
 
-        # Spacer that matches the prefix column width in the bar below
-        cur_prefix_spacer = QWidget()
-        cur_prefix_spacer.setFixedWidth(PREFIX_W)
-        cur_prefix_spacer.setStyleSheet('background: transparent;')
-        cur_bar_layout.addWidget(cur_prefix_spacer)
+        cur_bar_prefix = QLabel('Now:')
+        cur_bar_prefix.setFixedWidth(46)
+        cur_bar_prefix.setStyleSheet('color: #666; font-size: 9pt; background: transparent;')
+        cur_bar_prefix.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        cur_bar_layout.addWidget(cur_bar_prefix)
 
         self.current_image_name_label = QLabel('—')
-        self.current_image_name_label.setStyleSheet(
-            'color: #999; font-size: 8.5pt; font-style: italic; background: transparent;'
-        )
+        self.current_image_name_label.setStyleSheet(TEXT_CSS)
         self.current_image_name_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         cur_bar_layout.addWidget(self.current_image_name_label, 1)
 
         right_panel.addWidget(cur_bar)
 
-        # --- Bar 2: operation status ---
+        # --- Bar 2: last operation result ---
         status_bar = QWidget()
-        status_bar.setStyleSheet('background-color: #2b2b2b; border-radius: 0px 0px 6px 6px;')
-        status_bar.setFixedHeight(28)
+        status_bar.setStyleSheet(BAR_STYLE.format(bg='#2b2b2b'))
+        status_bar.setFixedHeight(26)
         status_bar_layout = QHBoxLayout(status_bar)
-        status_bar_layout.setContentsMargins(LPAD, 0, LPAD, 0)
+        status_bar_layout.setContentsMargins(10, 0, 10, 0)
         status_bar_layout.setSpacing(0)
 
+        # Prefix label ("Last:" / same width as "Now:" above)
+        op_prefix = QLabel('Last:')
+        op_prefix.setFixedWidth(46)
+        op_prefix.setStyleSheet('color: #666; font-size: 9pt; background: transparent;')
+        op_prefix.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        status_bar_layout.addWidget(op_prefix)
+
+        # Filename + arrow + folder (left-aligned, stretches)
         self.operation_status_label = QLabel('Ready — press a number key (1–0) to sort the current image')
-        self.operation_status_label.setStyleSheet('color: #888; font-size: 9pt; background: transparent;')
+        self.operation_status_label.setStyleSheet(TEXT_CSS)
         self.operation_status_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        status_bar_layout.addWidget(self.operation_status_label)
+        status_bar_layout.addWidget(self.operation_status_label, 1)
+
+        # Operation badge (right-aligned, fixed)
+        self.operation_badge_label = QLabel('')
+        self.operation_badge_label.setFixedWidth(54)
+        self.operation_badge_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.operation_badge_label.setStyleSheet('font-size: 9pt; font-weight: bold; background: transparent; color: transparent;')
+        status_bar_layout.addWidget(self.operation_badge_label)
 
         right_panel.addWidget(status_bar)
 
@@ -476,7 +490,7 @@ class ImageSorterApp(QMainWindow):
 
     # --- Dynamic folder-row helpers ---
 
-    # Fixed key sequence: 1-9, 0, then a-z
+    # Default key sequence: 1-9, 0, then a-z
     KEY_SEQUENCE = (
         [str(i) for i in range(1, 10)] + ['0'] +
         [chr(c) for c in range(ord('a'), ord('z') + 1)]
@@ -489,23 +503,56 @@ class ImageSorterApp(QMainWindow):
 
     def _add_folder_row(self, default_name=''):
         idx = len(self.folder_inputs)
+        default_key = self._get_key_label_for(idx)
+
         row_widget = QWidget()
         row_widget.setFixedHeight(36)
         row = QHBoxLayout(row_widget)
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(3)
 
-        # Key label (fixed, shows assigned key)
-        key_label = QLabel(self._get_key_label_for(idx))
-        key_label.setFixedWidth(22)
-        key_label.setAlignment(Qt.AlignCenter)
-        key_label.setStyleSheet('QLabel { font-weight: bold; font-size: 10pt; color: #333; }')
-        row.addWidget(key_label)
+        # --- Key display/edit area ---
+        # Shows the assigned key; clicking ⌨ makes it editable
+        key_edit = QLineEdit(default_key)
+        key_edit.setFixedWidth(28)
+        key_edit.setFixedHeight(30)
+        key_edit.setEnabled(False)
+        key_edit.setAlignment(Qt.AlignCenter)
+        key_edit.setMaxLength(2)
+        key_edit.setStyleSheet("""
+            QLineEdit {
+                font-weight: bold; font-size: 10pt; color: #333;
+                border: 2px solid transparent; border-radius: 5px;
+                background: transparent; padding: 0px;
+            }
+            QLineEdit:enabled {
+                background: white; border: 2px solid #f0a500;
+                color: #c0700a;
+            }
+        """)
+        row.addWidget(key_edit)
 
-        # Pencil toggle
+        # ⌨ button to unlock key editing
+        key_btn = QPushButton('⌨')
+        key_btn.setCheckable(True)
+        key_btn.setFixedWidth(24)
+        key_btn.setFixedHeight(30)
+        key_btn.setFocusPolicy(Qt.NoFocus)
+        key_btn.setToolTip('Edit the shortcut key for this folder')
+        key_btn.setStyleSheet("""
+            QPushButton { border-radius: 5px; border: 1px solid #ccc; font-size: 9pt;
+                          background: white; padding: 0px; color: #777; }
+            QPushButton:checked { background-color: #fff3cd; border-color: #f0a500; color: #c0700a; }
+            QPushButton:hover { background-color: #f5f5f5; }
+        """)
+        key_btn.toggled.connect(key_edit.setEnabled)
+        key_btn.toggled.connect(lambda checked: self.on_pencil_clicked() if not checked else None)
+        row.addWidget(key_btn)
+
+        # Pencil toggle for folder name
         pencil_btn = QPushButton('✎')
         pencil_btn.setCheckable(True)
-        pencil_btn.setFixedWidth(30)
+        pencil_btn.setFixedWidth(28)
         pencil_btn.setFixedHeight(30)
         pencil_btn.setStyleSheet("""
             QPushButton { border-radius: 6px; border: 2px solid #aaa; padding: 2px; font-size: 9pt; }
@@ -527,12 +574,13 @@ class ImageSorterApp(QMainWindow):
 
         # Up button
         up_btn = QPushButton('▲')
-        up_btn.setFixedWidth(24)
+        up_btn.setFixedWidth(22)
         up_btn.setFixedHeight(30)
         up_btn.setFocusPolicy(Qt.NoFocus)
         up_btn.setToolTip('Move up')
         up_btn.setStyleSheet("""
-            QPushButton { border-radius: 5px; border: 1px solid #ccc; font-size: 7pt; background: white; padding: 0px; }
+            QPushButton { border-radius: 4px; border: 1px solid #ccc; font-size: 7pt;
+                          background: white; padding: 0px; }
             QPushButton:hover { background-color: #e8e8e8; }
         """)
         up_btn.clicked.connect(lambda _, w=row_widget: self._move_row_up(w))
@@ -540,12 +588,13 @@ class ImageSorterApp(QMainWindow):
 
         # Down button
         dn_btn = QPushButton('▼')
-        dn_btn.setFixedWidth(24)
+        dn_btn.setFixedWidth(22)
         dn_btn.setFixedHeight(30)
         dn_btn.setFocusPolicy(Qt.NoFocus)
         dn_btn.setToolTip('Move down')
         dn_btn.setStyleSheet("""
-            QPushButton { border-radius: 5px; border: 1px solid #ccc; font-size: 7pt; background: white; padding: 0px; }
+            QPushButton { border-radius: 4px; border: 1px solid #ccc; font-size: 7pt;
+                          background: white; padding: 0px; }
             QPushButton:hover { background-color: #e8e8e8; }
         """)
         dn_btn.clicked.connect(lambda _, w=row_widget: self._move_row_dn(w))
@@ -553,52 +602,52 @@ class ImageSorterApp(QMainWindow):
 
         self.folder_inputs.append(edit)
         self.folder_enabled.append(pencil_btn)
+        self.folder_keys.append(key_edit)   # track key edit widgets
         self.folder_rows_widgets.append(row_widget)
         self.folder_rows_layout.addWidget(row_widget)
 
+    def _get_effective_key(self, index):
+        """Return the active key string for a row (custom if set, else default)."""
+        if index < len(self.folder_keys):
+            val = self.folder_keys[index].text().strip()
+            if val:
+                return val.lower()
+        return self._get_key_label_for(index)
+
     def _refresh_key_labels(self):
-        """After any reorder, update the key label in each row to match its new position."""
+        """After reorder, update default key labels only for rows that haven't been customised."""
         for i, row_widget in enumerate(self.folder_rows_widgets):
-            # Key label is the first widget in the row's layout
-            lbl = row_widget.layout().itemAt(0).widget()
-            if isinstance(lbl, QLabel):
-                lbl.setText(self._get_key_label_for(i))
+            key_edit_widget = row_widget.layout().itemAt(0).widget()
+            if isinstance(key_edit_widget, QLineEdit):
+                # Only reset if not currently being edited (key_btn not checked)
+                key_btn_widget = row_widget.layout().itemAt(1).widget()
+                if isinstance(key_btn_widget, QPushButton) and not key_btn_widget.isChecked():
+                    # Only overwrite if it still holds the old default value
+                    old_default = self._get_key_label_for(i)
+                    # Check if the value matches any default in KEY_SEQUENCE (i.e. hasn't been customised)
+                    current_val = key_edit_widget.text().strip()
+                    if current_val in self.KEY_SEQUENCE:
+                        key_edit_widget.setText(old_default)
+
+    def _swap_rows(self, i, j):
+        for lst in (self.folder_rows_widgets, self.folder_inputs, self.folder_enabled, self.folder_keys):
+            lst[i], lst[j] = lst[j], lst[i]
+        for w in self.folder_rows_widgets:
+            self.folder_rows_layout.removeWidget(w)
+        for w in self.folder_rows_widgets:
+            self.folder_rows_layout.addWidget(w)
+        self._refresh_key_labels()
+        self.centralWidget().setFocus()
 
     def _move_row_up(self, row_widget):
         idx = self.folder_rows_widgets.index(row_widget)
-        if idx == 0:
-            return
-        # Swap in all tracking lists
-        self.folder_rows_widgets[idx], self.folder_rows_widgets[idx - 1] = \
-            self.folder_rows_widgets[idx - 1], self.folder_rows_widgets[idx]
-        self.folder_inputs[idx], self.folder_inputs[idx - 1] = \
-            self.folder_inputs[idx - 1], self.folder_inputs[idx]
-        self.folder_enabled[idx], self.folder_enabled[idx - 1] = \
-            self.folder_enabled[idx - 1], self.folder_enabled[idx]
-        # Rebuild layout order
-        for w in self.folder_rows_widgets:
-            self.folder_rows_layout.removeWidget(w)
-        for w in self.folder_rows_widgets:
-            self.folder_rows_layout.addWidget(w)
-        self._refresh_key_labels()
-        self.centralWidget().setFocus()
+        if idx > 0:
+            self._swap_rows(idx, idx - 1)
 
     def _move_row_dn(self, row_widget):
         idx = self.folder_rows_widgets.index(row_widget)
-        if idx >= len(self.folder_rows_widgets) - 1:
-            return
-        self.folder_rows_widgets[idx], self.folder_rows_widgets[idx + 1] = \
-            self.folder_rows_widgets[idx + 1], self.folder_rows_widgets[idx]
-        self.folder_inputs[idx], self.folder_inputs[idx + 1] = \
-            self.folder_inputs[idx + 1], self.folder_inputs[idx]
-        self.folder_enabled[idx], self.folder_enabled[idx + 1] = \
-            self.folder_enabled[idx + 1], self.folder_enabled[idx]
-        for w in self.folder_rows_widgets:
-            self.folder_rows_layout.removeWidget(w)
-        for w in self.folder_rows_widgets:
-            self.folder_rows_layout.addWidget(w)
-        self._refresh_key_labels()
-        self.centralWidget().setFocus()
+        if idx < len(self.folder_rows_widgets) - 1:
+            self._swap_rows(idx, idx + 1)
 
     def _on_add_row(self):
         self._add_folder_row('')
@@ -781,8 +830,7 @@ class ImageSorterApp(QMainWindow):
             super().keyPressEvent(event)
             return
 
-        # Map key to folder index using KEY_SEQUENCE
-        # Keys 1-9 → index 0-8, Key_0 → index 9, letters a-z → index 10-35
+        # Build pressed key string (single char, lowercase)
         key_char = None
         if Qt.Key_1 <= key <= Qt.Key_9:
             key_char = str(key - Qt.Key_0)
@@ -792,13 +840,12 @@ class ImageSorterApp(QMainWindow):
             key_char = chr(key).lower()
 
         if key_char is not None:
-            try:
-                idx = self.KEY_SEQUENCE.index(key_char)
-                self.handle_sort(idx)
-                event.accept()
-                return
-            except ValueError:
-                pass
+            # Check each row for a matching effective key
+            for idx in range(len(self.folder_inputs)):
+                if self._get_effective_key(idx) == key_char:
+                    self.handle_sort(idx)
+                    event.accept()
+                    return
 
         super().keyPressEvent(event)
 
@@ -844,19 +891,19 @@ class ImageSorterApp(QMainWindow):
         op = 'MOVED' if not self.copy_mode else 'COPIED'
         op_color = '#e67e22' if not self.copy_mode else '#27ae60'
         filename = os.path.basename(src_path)
-        # PREFIX_W=68px spacer used in the bar above — mirror it here with a fixed-width inline-block
-        self.operation_status_label.setText(
-            f'<span style="display:inline-block;min-width:68px;color:{op_color};font-weight:bold;">{op}</span>'
-            f'<span style="color:#aaa;">{filename}  →  {target_name}</span>'
+        self.operation_status_label.setText(f'{filename}  →  {target_name}')
+        self.operation_status_label.setStyleSheet('color: #ccc; font-size: 9pt; background: transparent;')
+        self.operation_status_label.setTextFormat(Qt.PlainText)
+        self.operation_badge_label.setText(op)
+        self.operation_badge_label.setStyleSheet(
+            f'font-size: 9pt; font-weight: bold; background: transparent; color: {op_color};'
         )
-        self.operation_status_label.setTextFormat(Qt.RichText)
 
         self.update_previews()
 
         if not self.copy_mode and was_last_image:
-            self.operation_status_label.setText(
-                '<span style="color:#aaa;">No more images to sort in the source folder.</span>'
-            )
+            self.operation_status_label.setText('No more images to sort in the source folder.')
+            self.operation_badge_label.setText('')
 
         self.centralWidget().setFocus()
 

@@ -5,7 +5,7 @@ from datetime import datetime
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QPushButton,
     QFileDialog, QHBoxLayout, QVBoxLayout, QLineEdit,
-    QMessageBox, QSpacerItem, QSizePolicy, QScrollArea
+    QMessageBox, QSpacerItem, QSizePolicy, QScrollArea, QCheckBox
 )
 from PyQt5.QtGui import QPixmap, QIcon
 from PyQt5.QtCore import Qt, QSettings
@@ -104,8 +104,7 @@ class ImageSorterApp(QMainWindow):
         lbl_folders.setWordWrap(True)
         left_panel.addWidget(lbl_folders)
 
-        # --- Target base folder: use-same-as-step-1 toggle + custom picker ---
-        # Divider line
+        # --- Sort destination folder ---
         divider = QLabel()
         divider.setFixedHeight(1)
         divider.setStyleSheet('background-color: #ddd; margin: 2px 0px;')
@@ -115,104 +114,85 @@ class ImageSorterApp(QMainWindow):
         lbl_target_header.setStyleSheet('QLabel { color: #333; font-size: 10pt; font-weight: bold; margin-top: 4px; }')
         left_panel.addWidget(lbl_target_header)
 
-        # Toggle button: "Use same folder as Step 1"
-        self.use_source_btn = QPushButton('✔  Use same folder as Step 1 (source)')
-        self.use_source_btn.setCheckable(True)
-        self.use_source_btn.setChecked(True)   # default: use source
-        self.use_source_btn.setFocusPolicy(Qt.NoFocus)
-        self.use_source_btn.setMinimumHeight(38)
-        self.use_source_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #e6f4ea; color: #2d6a4f; font-weight: bold;
-                border: 2px solid #95d5b2; border-radius: 8px; padding: 6px 10px;
-                text-align: left;
+        lbl_target_desc = QLabel(
+            'Choose where sorted images will be placed. '
+            'Either use the same folder opened in Step 1, or pick any other folder on your computer.'
+        )
+        lbl_target_desc.setStyleSheet('QLabel { color: #666; font-size: 9pt; }')
+        lbl_target_desc.setWordWrap(True)
+        left_panel.addWidget(lbl_target_desc)
+
+        # Checkbox row
+        self.use_source_checkbox = QCheckBox('Use same folder as Step 1 (source folder)')
+        self.use_source_checkbox.setChecked(True)
+        self.use_source_checkbox.setFocusPolicy(Qt.NoFocus)
+        self.use_source_checkbox.setStyleSheet("""
+            QCheckBox {
+                color: #2d6a4f;
+                font-weight: bold;
+                font-size: 9.5pt;
+                spacing: 6px;
             }
-            QPushButton:!checked {
-                background-color: #f0f0f0; color: #888;
-                border: 2px solid #ccc;
+            QCheckBox::indicator {
+                width: 16px;
+                height: 16px;
             }
         """)
-        self.use_source_btn.clicked.connect(self.on_use_source_toggled)
-        left_panel.addWidget(self.use_source_btn)
+        self.use_source_checkbox.stateChanged.connect(self.on_use_source_toggled)
+        left_panel.addWidget(self.use_source_checkbox)
 
-        # Custom target folder row (shown when toggle is OFF)
-        self.custom_target_widget = QWidget()
-        custom_target_layout = QVBoxLayout(self.custom_target_widget)
-        custom_target_layout.setContentsMargins(0, 4, 0, 0)
-        custom_target_layout.setSpacing(4)
-
-        lbl_custom = QLabel('Custom target folder:')
-        lbl_custom.setStyleSheet('QLabel { color: #444; font-size: 9.5pt; }')
-        custom_target_layout.addWidget(lbl_custom)
-
+        # Path row: text field + "..." browse button (always visible)
         target_row = QHBoxLayout()
 
         self.target_folder_display = QLineEdit()
-        self.target_folder_display.setPlaceholderText('No folder selected — click 📁 to choose')
-        self.target_folder_display.setReadOnly(True)
+        self.target_folder_display.setPlaceholderText('No folder selected yet (open a folder in Step 1 or type a path)')
+        self.target_folder_display.setReadOnly(True)   # starts locked (checkbox is checked)
         self.target_folder_display.setStyleSheet("""
             QLineEdit { 
                 padding: 5px; 
                 border-radius: 6px; 
-                border: 2px solid #aaa;
-                background-color: #f0f0f0;
-                color: #333;
+                border: 2px solid #ccc;
+                background-color: #efefef;
+                color: #555;
                 font-size: 9pt;
             }
         """)
+        self.target_folder_display.textEdited.connect(self.on_target_path_edited)
         target_row.addWidget(self.target_folder_display)
 
-        self.select_target_btn = QPushButton('📁')
+        self.select_target_btn = QPushButton('…')
         self.select_target_btn.setFocusPolicy(Qt.NoFocus)
-        self.select_target_btn.setFixedWidth(36)
+        self.select_target_btn.setFixedWidth(32)
         self.select_target_btn.setMinimumHeight(32)
-        self.select_target_btn.setToolTip('Select custom target base folder')
+        self.select_target_btn.setToolTip('Browse for target folder')
+        self.select_target_btn.setEnabled(False)   # disabled while checkbox is checked
         self.select_target_btn.setStyleSheet("""
             QPushButton { 
-                background-color: white; 
-                font-size: 14pt;
-                border: 2px solid #aaa; 
-                border-radius: 8px;
-                padding: 2px;
-            }
-            QPushButton:hover { background-color: #f8f8f8; }
-        """)
-        self.select_target_btn.clicked.connect(self.select_target_folder)
-        target_row.addWidget(self.select_target_btn)
-
-        self.clear_target_btn = QPushButton('✕')
-        self.clear_target_btn.setFocusPolicy(Qt.NoFocus)
-        self.clear_target_btn.setFixedWidth(36)
-        self.clear_target_btn.setMinimumHeight(32)
-        self.clear_target_btn.setToolTip('Clear custom folder selection')
-        self.clear_target_btn.setStyleSheet("""
-            QPushButton { 
-                background-color: white; 
+                background-color: white;
+                font-weight: bold;
                 font-size: 11pt;
                 border: 2px solid #aaa; 
                 border-radius: 8px;
                 padding: 2px;
             }
-            QPushButton:hover { background-color: #ffe0e0; }
+            QPushButton:hover:enabled { background-color: #f0f0f0; }
+            QPushButton:disabled { background-color: #e8e8e8; color: #bbb; border-color: #ccc; }
         """)
-        self.clear_target_btn.clicked.connect(self.clear_target_folder)
-        target_row.addWidget(self.clear_target_btn)
+        self.select_target_btn.clicked.connect(self.select_target_folder)
+        target_row.addWidget(self.select_target_btn)
 
-        custom_target_layout.addLayout(target_row)
+        left_panel.addLayout(target_row)
 
-        self.target_status_label = QLabel('')
-        self.target_status_label.setStyleSheet('QLabel { color: #c0392b; font-size: 9pt; font-style: italic; }')
+        self.target_status_label = QLabel('ℹ️  Destination is locked to the source folder (Step 1).')
+        self.target_status_label.setStyleSheet('QLabel { color: #888; font-size: 9pt; font-style: italic; }')
         self.target_status_label.setWordWrap(True)
-        custom_target_layout.addWidget(self.target_status_label)
-
-        self.custom_target_widget.setVisible(False)   # hidden by default (source mode active)
-        left_panel.addWidget(self.custom_target_widget)
+        left_panel.addWidget(self.target_status_label)
 
         divider2 = QLabel()
         divider2.setFixedHeight(1)
         divider2.setStyleSheet('background-color: #ddd; margin: 4px 0px;')
         left_panel.addWidget(divider2)
-        # --- END target folder block ---
+        # --- END destination folder block ---
 
         # Sub-header and load button (below target folder selection)
         sub_header = QLabel('Check ✎ to edit name · Only folders with names will be created')
@@ -338,26 +318,61 @@ class ImageSorterApp(QMainWindow):
 
     # --- Target folder methods ---
 
-    def on_use_source_toggled(self):
-        using_source = self.use_source_btn.isChecked()
-        if using_source:
-            # Switched back to "use source" — hide custom widget, clear custom folder
-            self.use_source_btn.setText('✔  Use same folder as Step 1 (source)')
-            self.custom_target_widget.setVisible(False)
+    def on_use_source_toggled(self, state):
+        """Called when the 'Use same folder as Step 1' checkbox changes."""
+        checked = (state == Qt.Checked)
+        if checked:
+            # Lock to source folder
             self.target_base_folder = None
             self.settings.remove('last_target_folder')
+            self.target_folder_display.setReadOnly(True)
+            self.target_folder_display.setStyleSheet("""
+                QLineEdit { 
+                    padding: 5px; border-radius: 6px;
+                    border: 2px solid #ccc; background-color: #efefef;
+                    color: #555; font-size: 9pt;
+                }
+            """)
+            self.select_target_btn.setEnabled(False)
+            # Show the current source folder path (if one is open)
+            if self.current_folder:
+                self.target_folder_display.setText(self.current_folder)
+            else:
+                self.target_folder_display.clear()
+            self.target_status_label.setText('ℹ️  Destination is locked to the source folder (Step 1).')
+            self.target_status_label.setStyleSheet('QLabel { color: #888; font-size: 9pt; font-style: italic; }')
         else:
-            # Switched to custom — show the picker area and open browser immediately
-            self.use_source_btn.setText('☐  Use same folder as Step 1 (source)')
-            self.custom_target_widget.setVisible(True)
-            # Auto-open folder browser
-            self.select_target_folder()
-            # If user cancelled the dialog, revert toggle back to "use source"
-            if not self.target_base_folder:
-                self.use_source_btn.setChecked(True)
-                self.use_source_btn.setText('✔  Use same folder as Step 1 (source)')
-                self.custom_target_widget.setVisible(False)
+            # Unlock for custom input
+            self.target_folder_display.setReadOnly(False)
+            self.target_folder_display.setStyleSheet("""
+                QLineEdit { 
+                    padding: 5px; border-radius: 6px;
+                    border: 2px solid #aaa; background-color: #fff;
+                    color: #222; font-size: 9pt;
+                }
+            """)
+            self.select_target_btn.setEnabled(True)
+            self.target_folder_display.setPlaceholderText('Type a path or click … to browse')
+            self.target_status_label.setText('📂  Type a folder path or click … to browse.')
+            self.target_status_label.setStyleSheet('QLabel { color: #555; font-size: 9pt; font-style: italic; }')
         self.centralWidget().setFocus()
+
+    def on_target_path_edited(self, text):
+        """Called when the user manually types a path into the target folder field."""
+        path = text.strip()
+        if os.path.isdir(path):
+            self.target_base_folder = path
+            self.settings.setValue('last_target_folder', path)
+            self.target_status_label.setText(f'✅  Target set: {os.path.basename(path)}')
+            self.target_status_label.setStyleSheet('QLabel { color: #2d6a4f; font-size: 9pt; font-style: italic; }')
+        else:
+            self.target_base_folder = None
+            if path:
+                self.target_status_label.setText('⚠  Path not found — enter a valid folder path.')
+                self.target_status_label.setStyleSheet('QLabel { color: #c0392b; font-size: 9pt; font-style: italic; }')
+            else:
+                self.target_status_label.setText('📂  Type a folder path or click … to browse.')
+                self.target_status_label.setStyleSheet('QLabel { color: #555; font-size: 9pt; font-style: italic; }')
 
     def select_target_folder(self):
         last_target = self.settings.value('last_target_folder', '')
@@ -372,10 +387,8 @@ class ImageSorterApp(QMainWindow):
 
         self.target_folder_display.setText(folder)
         self.target_folder_display.setToolTip(folder)
-        self.target_status_label.setText(f'✅ Target set: {os.path.basename(folder)}')
-        self.target_status_label.setStyleSheet(
-            'QLabel { color: #2d6a4f; font-size: 9pt; font-style: italic; }'
-        )
+        self.target_status_label.setText(f'✅  Target set: {os.path.basename(folder)}')
+        self.target_status_label.setStyleSheet('QLabel { color: #2d6a4f; font-size: 9pt; font-style: italic; }')
         self.centralWidget().setFocus()
 
     def clear_target_folder(self):
@@ -383,14 +396,12 @@ class ImageSorterApp(QMainWindow):
         self.settings.remove('last_target_folder')
         self.target_folder_display.clear()
         self.target_folder_display.setToolTip('')
-        self.target_status_label.setText('⚠ No folder selected — images will not be sorted until a folder is chosen.')
-        self.target_status_label.setStyleSheet(
-            'QLabel { color: #c0392b; font-size: 9pt; font-style: italic; }'
-        )
+        self.target_status_label.setText('⚠  No folder selected — images will not be sorted until a folder is chosen.')
+        self.target_status_label.setStyleSheet('QLabel { color: #c0392b; font-size: 9pt; font-style: italic; }')
         self.centralWidget().setFocus()
 
     def get_effective_target_folder(self):
-        """Returns the target base folder, falling back to the source folder."""
+        """Returns the custom target folder if set, otherwise falls back to the source folder."""
         if self.target_base_folder and os.path.isdir(self.target_base_folder):
             return self.target_base_folder
         return self.current_folder
@@ -452,6 +463,9 @@ class ImageSorterApp(QMainWindow):
 
         self.current_index = 0
         self.update_previews()
+        # If "use source" checkbox is checked, keep the display in sync
+        if self.use_source_checkbox.isChecked():
+            self.target_folder_display.setText(folder)
         self.centralWidget().setFocus()
 
     def load_existing_subfolders(self):

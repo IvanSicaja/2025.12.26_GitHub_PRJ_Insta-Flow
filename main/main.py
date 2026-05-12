@@ -183,11 +183,6 @@ class ImageSorterApp(QMainWindow):
 
         left_panel.addLayout(target_row)
 
-        self.target_status_label = QLabel('ℹ️  Destination is locked to the source folder (Step 1).')
-        self.target_status_label.setStyleSheet('QLabel { color: #888; font-size: 9pt; font-style: italic; }')
-        self.target_status_label.setWordWrap(True)
-        left_panel.addWidget(self.target_status_label)
-
         divider2 = QLabel()
         divider2.setFixedHeight(1)
         divider2.setStyleSheet('background-color: #ddd; margin: 4px 0px;')
@@ -285,8 +280,31 @@ class ImageSorterApp(QMainWindow):
 
         # RIGHT PANEL (image previews)
         right_panel = QVBoxLayout()
-        right_panel.setContentsMargins(20, 20, 20, 20)
-        right_panel.setSpacing(10)
+        right_panel.setContentsMargins(20, 10, 20, 10)
+        right_panel.setSpacing(6)
+
+        # Source folder info bar (top of preview area)
+        source_bar = QWidget()
+        source_bar.setStyleSheet('background-color: #2b2b2b; border-radius: 6px;')
+        source_bar.setFixedHeight(28)
+        source_bar_layout = QHBoxLayout(source_bar)
+        source_bar_layout.setContentsMargins(10, 0, 10, 0)
+        source_bar_layout.setSpacing(6)
+
+        source_bar_icon = QLabel('📂')
+        source_bar_icon.setStyleSheet('color: #aaa; font-size: 10pt; background: transparent;')
+        source_bar_layout.addWidget(source_bar_icon)
+
+        source_bar_prefix = QLabel('Source:')
+        source_bar_prefix.setStyleSheet('color: #888; font-size: 9pt; font-weight: bold; background: transparent;')
+        source_bar_layout.addWidget(source_bar_prefix)
+
+        self.source_folder_bar_label = QLabel('No folder selected — use Step 1 to open a folder')
+        self.source_folder_bar_label.setStyleSheet('color: #ccc; font-size: 9pt; background: transparent;')
+        self.source_folder_bar_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        source_bar_layout.addWidget(self.source_folder_bar_label, 1)
+
+        right_panel.addWidget(source_bar)
 
         self.main_image_label = QLabel()
         self.main_image_label.setAlignment(Qt.AlignCenter)
@@ -309,6 +327,21 @@ class ImageSorterApp(QMainWindow):
         self.secondary_layout.addStretch(1)
 
         right_panel.addLayout(self.secondary_layout, stretch=2)
+
+        # Operation status bar (bottom of preview area)
+        status_bar = QWidget()
+        status_bar.setStyleSheet('background-color: #2b2b2b; border-radius: 6px;')
+        status_bar.setFixedHeight(28)
+        status_bar_layout = QHBoxLayout(status_bar)
+        status_bar_layout.setContentsMargins(10, 0, 10, 0)
+        status_bar_layout.setSpacing(0)
+
+        self.operation_status_label = QLabel('Ready — press a number key (1–0) to sort the current image')
+        self.operation_status_label.setStyleSheet('color: #888; font-size: 9pt; background: transparent;')
+        self.operation_status_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        status_bar_layout.addWidget(self.operation_status_label)
+
+        right_panel.addWidget(status_bar)
 
         right_container = QWidget()
         right_container.setLayout(right_panel)
@@ -339,8 +372,6 @@ class ImageSorterApp(QMainWindow):
                 self.target_folder_display.setText(self.current_folder)
             else:
                 self.target_folder_display.clear()
-            self.target_status_label.setText('ℹ️  Destination is locked to the source folder (Step 1).')
-            self.target_status_label.setStyleSheet('QLabel { color: #888; font-size: 9pt; font-style: italic; }')
         else:
             # Unlock for custom input
             self.target_folder_display.setReadOnly(False)
@@ -353,8 +384,6 @@ class ImageSorterApp(QMainWindow):
             """)
             self.select_target_btn.setEnabled(True)
             self.target_folder_display.setPlaceholderText('Type a path or click … to browse')
-            self.target_status_label.setText('📂  Type a folder path or click … to browse.')
-            self.target_status_label.setStyleSheet('QLabel { color: #555; font-size: 9pt; font-style: italic; }')
         self.centralWidget().setFocus()
 
     def on_target_path_edited(self, text):
@@ -363,16 +392,8 @@ class ImageSorterApp(QMainWindow):
         if os.path.isdir(path):
             self.target_base_folder = path
             self.settings.setValue('last_target_folder', path)
-            self.target_status_label.setText(f'✅  Target set: {os.path.basename(path)}')
-            self.target_status_label.setStyleSheet('QLabel { color: #2d6a4f; font-size: 9pt; font-style: italic; }')
         else:
             self.target_base_folder = None
-            if path:
-                self.target_status_label.setText('⚠  Path not found — enter a valid folder path.')
-                self.target_status_label.setStyleSheet('QLabel { color: #c0392b; font-size: 9pt; font-style: italic; }')
-            else:
-                self.target_status_label.setText('📂  Type a folder path or click … to browse.')
-                self.target_status_label.setStyleSheet('QLabel { color: #555; font-size: 9pt; font-style: italic; }')
 
     def select_target_folder(self):
         last_target = self.settings.value('last_target_folder', '')
@@ -384,11 +405,8 @@ class ImageSorterApp(QMainWindow):
 
         self.target_base_folder = folder
         self.settings.setValue('last_target_folder', folder)
-
         self.target_folder_display.setText(folder)
         self.target_folder_display.setToolTip(folder)
-        self.target_status_label.setText(f'✅  Target set: {os.path.basename(folder)}')
-        self.target_status_label.setStyleSheet('QLabel { color: #2d6a4f; font-size: 9pt; font-style: italic; }')
         self.centralWidget().setFocus()
 
     def clear_target_folder(self):
@@ -396,8 +414,6 @@ class ImageSorterApp(QMainWindow):
         self.settings.remove('last_target_folder')
         self.target_folder_display.clear()
         self.target_folder_display.setToolTip('')
-        self.target_status_label.setText('⚠  No folder selected — images will not be sorted until a folder is chosen.')
-        self.target_status_label.setStyleSheet('QLabel { color: #c0392b; font-size: 9pt; font-style: italic; }')
         self.centralWidget().setFocus()
 
     def get_effective_target_folder(self):
@@ -452,6 +468,8 @@ class ImageSorterApp(QMainWindow):
 
         self.current_folder = folder
         self.settings.setValue('last_folder', folder)
+        # Update source folder info bar
+        self.source_folder_bar_label.setText(folder)
 
         self.images = [
             f for f in sorted(os.listdir(folder))
@@ -646,10 +664,22 @@ class ImageSorterApp(QMainWindow):
         # Write activity log entry into the root target base folder
         self.write_log_entry(target_base, target_name, src_path, dst_path)
 
+        # Show operation result in the status bar (no popup)
+        op = 'MOVED' if not self.copy_mode else 'COPIED'
+        op_color = '#e67e22' if not self.copy_mode else '#27ae60'
+        filename = os.path.basename(src_path)
+        self.operation_status_label.setText(
+            f'<span style="color:{op_color}; font-weight:bold;">{op}</span>'
+            f'<span style="color:#aaa;">  {filename}  →  {target_name}</span>'
+        )
+        self.operation_status_label.setTextFormat(Qt.RichText)
+
         self.update_previews()
 
         if not self.copy_mode and was_last_image:
-            QMessageBox.information(self, 'Done', 'No more images to preview.')
+            self.operation_status_label.setText(
+                '<span style="color:#aaa;">No more images to sort in the source folder.</span>'
+            )
 
         self.centralWidget().setFocus()
 

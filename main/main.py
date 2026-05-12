@@ -100,7 +100,7 @@ class ImageSorterApp(QMainWindow):
 
         # 4. Target folders configuration
         lbl_folders = QLabel('4. Configure target folders (press key 1–0 to sort):')
-        lbl_folders.setStyleSheet('QLabel { font-weight: bold; color: #333; font-size: 10.5pt; margin-top: 20px; }')
+        lbl_folders.setStyleSheet('QLabel { color: #444; font-size: 10pt; margin-top: 20px; }')
         lbl_folders.setWordWrap(True)
         left_panel.addWidget(lbl_folders)
 
@@ -319,12 +319,40 @@ class ImageSorterApp(QMainWindow):
 
         right_panel.addLayout(self.secondary_layout, stretch=2)
 
-        # Operation status bar (bottom of preview area)
+        # Two-line info bar at the bottom (current image name + last operation)
+        # Both bars share the same left padding so filenames align perfectly.
+        LPAD = 10          # left padding inside each bar
+        PREFIX_W = 68      # pixel width reserved for the operation prefix ("COPIED  " / "MOVED   ")
+
+        # --- Bar 1: current image name ---
+        cur_bar = QWidget()
+        cur_bar.setStyleSheet('background-color: #222; border-radius: 6px 6px 0px 0px;')
+        cur_bar.setFixedHeight(26)
+        cur_bar_layout = QHBoxLayout(cur_bar)
+        cur_bar_layout.setContentsMargins(LPAD, 0, LPAD, 0)
+        cur_bar_layout.setSpacing(0)
+
+        # Spacer that matches the prefix column width in the bar below
+        cur_prefix_spacer = QWidget()
+        cur_prefix_spacer.setFixedWidth(PREFIX_W)
+        cur_prefix_spacer.setStyleSheet('background: transparent;')
+        cur_bar_layout.addWidget(cur_prefix_spacer)
+
+        self.current_image_name_label = QLabel('—')
+        self.current_image_name_label.setStyleSheet(
+            'color: #999; font-size: 8.5pt; font-style: italic; background: transparent;'
+        )
+        self.current_image_name_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        cur_bar_layout.addWidget(self.current_image_name_label, 1)
+
+        right_panel.addWidget(cur_bar)
+
+        # --- Bar 2: operation status ---
         status_bar = QWidget()
-        status_bar.setStyleSheet('background-color: #2b2b2b; border-radius: 6px;')
+        status_bar.setStyleSheet('background-color: #2b2b2b; border-radius: 0px 0px 6px 6px;')
         status_bar.setFixedHeight(28)
         status_bar_layout = QHBoxLayout(status_bar)
-        status_bar_layout.setContentsMargins(10, 0, 10, 0)
+        status_bar_layout.setContentsMargins(LPAD, 0, LPAD, 0)
         status_bar_layout.setSpacing(0)
 
         self.operation_status_label = QLabel('Ready — press a number key (1–0) to sort the current image')
@@ -706,9 +734,13 @@ class ImageSorterApp(QMainWindow):
             self.main_image_label.clear()
             for lbl in self.secondary_labels:
                 lbl.clear()
+            self.current_image_name_label.setText('—')
             return
 
-        img_path = os.path.join(self.current_folder, self.images[self.current_index])
+        current_name = self.images[self.current_index]
+        self.current_image_name_label.setText(current_name)
+
+        img_path = os.path.join(self.current_folder, current_name)
         pix = QPixmap(img_path)
         self.main_image_label.setPixmap(pix.scaled(
             self.main_image_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
@@ -812,9 +844,10 @@ class ImageSorterApp(QMainWindow):
         op = 'MOVED' if not self.copy_mode else 'COPIED'
         op_color = '#e67e22' if not self.copy_mode else '#27ae60'
         filename = os.path.basename(src_path)
+        # PREFIX_W=68px spacer used in the bar above — mirror it here with a fixed-width inline-block
         self.operation_status_label.setText(
-            f'<span style="color:{op_color}; font-weight:bold;">{op}</span>'
-            f'<span style="color:#aaa;">  {filename}  →  {target_name}</span>'
+            f'<span style="display:inline-block;min-width:68px;color:{op_color};font-weight:bold;">{op}</span>'
+            f'<span style="color:#aaa;">{filename}  →  {target_name}</span>'
         )
         self.operation_status_label.setTextFormat(Qt.RichText)
 

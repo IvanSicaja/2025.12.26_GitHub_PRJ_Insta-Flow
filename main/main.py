@@ -129,7 +129,7 @@ class ImageSorterApp(QMainWindow):
         self.use_source_checkbox.setFocusPolicy(Qt.NoFocus)
         self.use_source_checkbox.setStyleSheet("""
             QCheckBox {
-                color: #2d6a4f;
+                color: #111;
                 font-weight: bold;
                 font-size: 9.5pt;
                 spacing: 6px;
@@ -333,8 +333,10 @@ class ImageSorterApp(QMainWindow):
         cur_bar_layout.setContentsMargins(10, 0, 10, 0)
         cur_bar_layout.setSpacing(0)
 
-        cur_bar_prefix = QLabel('Now:')
-        cur_bar_prefix.setFixedWidth(46)
+        PREFIX_W = 58   # fixed width for both prefix labels — ensures filename columns align
+
+        cur_bar_prefix = QLabel('Preview:')
+        cur_bar_prefix.setFixedWidth(PREFIX_W)
         cur_bar_prefix.setStyleSheet('color: #666; font-size: 9pt; background: transparent;')
         cur_bar_prefix.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         cur_bar_layout.addWidget(cur_bar_prefix)
@@ -354,9 +356,9 @@ class ImageSorterApp(QMainWindow):
         status_bar_layout.setContentsMargins(10, 0, 10, 0)
         status_bar_layout.setSpacing(0)
 
-        # Prefix label ("Last:" / same width as "Now:" above)
-        op_prefix = QLabel('Last:')
-        op_prefix.setFixedWidth(46)
+        # Prefix label — same fixed width as bar above so filenames align perfectly
+        op_prefix = QLabel('Last op:')
+        op_prefix.setFixedWidth(PREFIX_W)
         op_prefix.setStyleSheet('color: #666; font-size: 9pt; background: transparent;')
         op_prefix.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         status_bar_layout.addWidget(op_prefix)
@@ -464,7 +466,8 @@ class ImageSorterApp(QMainWindow):
         log_path = os.path.join(target_base, LOG_FILENAME)
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         operation = 'COPY' if self.copy_mode else 'MOVE'
-        new_entry = f'[{timestamp}] {operation} | {subfolder_name} | {image_src_path}'
+        dst_folder_path = os.path.join(target_base, subfolder_name)
+        new_entry = f'[{timestamp}]  {operation}  {image_src_path}  →  {dst_folder_path}'
 
         existing_entries = []
         if os.path.exists(log_path):
@@ -540,8 +543,8 @@ class ImageSorterApp(QMainWindow):
         key_btn.setFocusPolicy(Qt.NoFocus)
         key_btn.setToolTip('Edit the shortcut key for this folder')
         key_btn.setStyleSheet("""
-            QPushButton { border-radius: 5px; border: 1px solid #ccc; font-size: 9pt;
-                          background: white; padding: 0px; color: #777; }
+            QPushButton { border-radius: 6px; border: 2px solid #aaa; font-size: 9pt;
+                          background: white; padding: 2px; color: #444; }
             QPushButton:checked { background-color: #fff3cd; border-color: #f0a500; color: #c0700a; }
             QPushButton:hover { background-color: #f5f5f5; }
         """)

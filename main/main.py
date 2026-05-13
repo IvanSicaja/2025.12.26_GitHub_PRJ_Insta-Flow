@@ -102,11 +102,15 @@ class ImageSorterApp(QMainWindow):
         left_panel.addWidget(lbl_folders)
 
         # --- Sort destination folder ---
-        lbl_target_header = QLabel('Sort destination folder:')
+        lbl_target_header = QLabel('Sorting destination folder:')
         lbl_target_header.setStyleSheet('QLabel { color: #444; font-size: 10pt; }')
         left_panel.addWidget(lbl_target_header)
 
-        lbl_target_desc = QLabel('Use source folder (Step 1) or pick a different target.')
+        lbl_target_desc = QLabel(
+            'By default the subfolders defined below are created inside the folder '
+            'you opened in Step 1. Uncheck the box below to sort into a completely '
+            'different location instead.'
+        )
         lbl_target_desc.setStyleSheet('QLabel { color: #666; font-size: 9pt; margin-left: 6px; }')
         lbl_target_desc.setWordWrap(True)
         left_panel.addWidget(lbl_target_desc)
@@ -173,11 +177,34 @@ class ImageSorterApp(QMainWindow):
         left_panel.addLayout(target_row)
         # --- END destination folder block ---
 
-        # Sub-header and load button
-        sub_header = QLabel('⌨  Edit shortcut key\n✎  Edit folder name')
-        sub_header.setStyleSheet('QLabel { color: #555; font-size: 9pt; margin-left: 6px; }')
-        sub_header.setWordWrap(False)
-        left_panel.addWidget(sub_header)
+        # Icon legend — aligned using a fixed-width icon column
+        legend_widget = QWidget()
+        legend_layout = QVBoxLayout(legend_widget)
+        legend_layout.setContentsMargins(6, 2, 0, 2)
+        legend_layout.setSpacing(1)
+
+        for icon, desc in [('⌨', 'Edit shortcut key'), ('✎', 'Edit subfolder name')]:
+            leg_row = QHBoxLayout()
+            leg_row.setSpacing(4)
+            leg_icon = QLabel(icon)
+            leg_icon.setFixedWidth(18)
+            leg_icon.setStyleSheet('color: #555; font-size: 9pt;')
+            leg_text = QLabel(desc)
+            leg_text.setStyleSheet('color: #555; font-size: 9pt;')
+            leg_row.addWidget(leg_icon)
+            leg_row.addWidget(leg_text)
+            leg_row.addStretch()
+            legend_layout.addLayout(leg_row)
+
+        left_panel.addWidget(legend_widget)
+
+        lbl_load_desc = QLabel(
+            'Press "Load Subfolders" to import existing folder names automatically.\n'
+            'Press "Create Folders" to create any new names you typed below.'
+        )
+        lbl_load_desc.setStyleSheet('QLabel { color: #666; font-size: 9pt; margin-left: 6px; }')
+        lbl_load_desc.setWordWrap(True)
+        left_panel.addWidget(lbl_load_desc)
 
         self.load_folders_btn = QPushButton('Load Existing Subfolders (A-Z)')
         self.load_folders_btn.setFocusPolicy(Qt.NoFocus)
@@ -191,6 +218,28 @@ class ImageSorterApp(QMainWindow):
         """)
         self.load_folders_btn.clicked.connect(self.load_existing_subfolders)
         left_panel.addWidget(self.load_folders_btn)
+
+        # Column headers above the key-folder rows
+        col_header = QWidget()
+        col_header_layout = QHBoxLayout(col_header)
+        col_header_layout.setContentsMargins(0, 2, 0, 0)
+        col_header_layout.setSpacing(3)
+
+        # "Key" header — aligns with key_edit (28px) + key_btn (26px) + pencil_btn (26px) = 80px
+        lbl_col_key = QLabel('Key')
+        lbl_col_key.setFixedWidth(28)
+        lbl_col_key.setAlignment(Qt.AlignCenter)
+        lbl_col_key.setStyleSheet('color: #888; font-size: 8pt; font-weight: bold;')
+        col_header_layout.addWidget(lbl_col_key)
+
+        # spacer for ⌨ + ✎ buttons (26 + 26 + 3 spacing = 55px)
+        col_header_layout.addSpacing(55)
+
+        lbl_col_folder = QLabel('Subfolder name')
+        lbl_col_folder.setStyleSheet('color: #888; font-size: 8pt; font-weight: bold;')
+        col_header_layout.addWidget(lbl_col_folder, 1)
+
+        left_panel.addWidget(col_header)
 
         # Folder key-pair rows (dynamic)
         self.folder_inputs = []
@@ -242,7 +291,7 @@ class ImageSorterApp(QMainWindow):
         left_panel.addSpacerItem(QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding))
 
         left_scroll.setWidget(left_content)
-        left_scroll.setFixedWidth(340)
+        left_scroll.setFixedWidth(360)
         root_layout.addWidget(left_scroll)
 
         # RIGHT PANEL (image previews)
@@ -307,7 +356,7 @@ class ImageSorterApp(QMainWindow):
         cur_bar_layout.setContentsMargins(10, 0, 10, 0)
         cur_bar_layout.setSpacing(0)
 
-        PREFIX_W = 58   # fixed width for both prefix labels — ensures filename columns align
+        PREFIX_W = 66   # wide enough for "Last op:" at 9pt without clipping
 
         cur_bar_prefix = QLabel('Preview:')
         cur_bar_prefix.setFixedWidth(PREFIX_W)
@@ -540,7 +589,8 @@ class ImageSorterApp(QMainWindow):
         pencil_btn.setCheckable(True)
         pencil_btn.setFixedWidth(26)
         pencil_btn.setFixedHeight(28)
-        pencil_btn.setStyleSheet(ICON_BTN.format(w=26))
+        pencil_btn.setStyleSheet(ICON_BTN.format(w=26) +
+            "QPushButton:checked { background-color: #fff3cd; border-color: #f0a500; color: #c0700a; }")
         pencil_btn.setToolTip('Enable editing of folder name')
         pencil_btn.setFocusPolicy(Qt.NoFocus)
         pencil_btn.clicked.connect(self.on_pencil_clicked)

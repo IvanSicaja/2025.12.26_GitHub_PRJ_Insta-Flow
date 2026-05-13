@@ -4,7 +4,7 @@ import shutil
 from datetime import datetime
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QPushButton,
-    QFileDialog, QHBoxLayout, QVBoxLayout, QLineEdit,
+    QFileDialog, QHBoxLayout, QVBoxLayout, QGridLayout, QLineEdit,
     QMessageBox, QSpacerItem, QSizePolicy, QScrollArea, QCheckBox
 )
 from PyQt5.QtGui import QPixmap, QIcon
@@ -130,7 +130,7 @@ class ImageSorterApp(QMainWindow):
         lbl_checkbox_off.setStyleSheet('QLabel { color: #666; font-size: 9pt; margin-left: 26px; }')
         left_panel.addWidget(lbl_checkbox_off)
 
-        # Checkbox row
+        # Checkbox row — sits directly below its explanations
         self.use_source_checkbox = QCheckBox('Use same folder as Step 1 for target folder')
         self.use_source_checkbox.setChecked(True)
         self.use_source_checkbox.setFocusPolicy(Qt.NoFocus)
@@ -149,7 +149,7 @@ class ImageSorterApp(QMainWindow):
         self.use_source_checkbox.stateChanged.connect(self.on_use_source_toggled)
         left_panel.addWidget(self.use_source_checkbox)
 
-        # Path row: text field + "…" browse button
+        # Path row: text field + "…" browse button — sits directly below checkbox
         target_row = QHBoxLayout()
 
         self.target_folder_display = QLineEdit()
@@ -340,10 +340,27 @@ class ImageSorterApp(QMainWindow):
 
         right_panel.addWidget(source_bar)
 
+        # Main image wrapped in a container so we can overlay an op-notification in the top-right
+        img_container = QWidget()
+        img_container.setStyleSheet('background: transparent;')
+        img_container_layout = QGridLayout(img_container)
+        img_container_layout.setContentsMargins(0, 0, 0, 0)
+        img_container_layout.setSpacing(0)
+
         self.main_image_label = QLabel()
         self.main_image_label.setAlignment(Qt.AlignCenter)
         self.main_image_label.setStyleSheet('background-color: #222; border: 2px solid #444;')
-        right_panel.addWidget(self.main_image_label, stretch=8)
+        img_container_layout.addWidget(self.main_image_label, 0, 0)  # fills entire cell
+
+        # Overlay label — top-right corner, shown briefly after each sort operation
+        self.op_overlay_label = QLabel('')
+        self.op_overlay_label.setAlignment(Qt.AlignCenter)
+        self.op_overlay_label.setStyleSheet('background: transparent; color: transparent;')
+        self.op_overlay_label.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        img_container_layout.addWidget(self.op_overlay_label, 0, 0,
+                                        Qt.AlignTop | Qt.AlignRight)
+
+        right_panel.addWidget(img_container, stretch=8)
 
         self.secondary_layout = QHBoxLayout()
         self.secondary_layout.setSpacing(10)
@@ -893,7 +910,7 @@ class ImageSorterApp(QMainWindow):
         super().keyPressEvent(event)
 
     def _animate_badge(self, op_word, op_color):
-        """FIX 4: brief bright→dim flash so user notices the completed operation."""
+        """Brief bright→dim flash on the right-side badge in the status bar."""
         BRIGHT = f'font-size: 9pt; font-weight: bold; background: transparent; color: {op_color};'
         DIM    = 'font-size: 9pt; font-weight: bold; background: transparent; color: #666;'
 
@@ -914,6 +931,42 @@ class ImageSorterApp(QMainWindow):
         t3.setSingleShot(True)
         t3.timeout.connect(lambda: self.operation_badge_label.setStyleSheet(DIM))
         t3.start(560)
+
+    def _animate_overlay(self, op_word, op_color):
+        """
+        Show a large icon+text badge in the top-right corner of the preview image.
+        COPIED → green  📋  COPIED
+        MOVED  → orange ✂   MOVED
+        Animates: appear bright → fade to transparent over ~900 ms.
+        """
+        icon = '\U0001f4cb' if op_word == 'COPIED' else '\u2702'  # 📋 or ✂
+        label_text = f'{icon}  {op_word}'
+
+        # Steps: fully visible → half → gone
+        SHOW = (
+            f'font-size: 15pt; font-weight: bold; background: transparent;'
+            f' color: {op_color}; padding: 8px 12px;'
+            f' border-radius: 8px;'
+        )
+        HALF = (
+            f'font-size: 15pt; font-weight: bold; background: transparent;'
+            f' color: rgba(180,180,180,160); padding: 8px 12px;'
+            f' border-radius: 8px;'
+        )
+        GONE = 'background: transparent; color: transparent; padding: 8px 12px;'
+
+        self.op_overlay_label.setText(label_text)
+        self.op_overlay_label.setStyleSheet(SHOW)
+
+        t1 = QTimer(self)
+        t1.setSingleShot(True)
+        t1.timeout.connect(lambda: self.op_overlay_label.setStyleSheet(HALF))
+        t1.start(400)
+
+        t2 = QTimer(self)
+        t2.setSingleShot(True)
+        t2.timeout.connect(lambda: self.op_overlay_label.setStyleSheet(GONE))
+        t2.start(900)
 
     def handle_sort(self, folder_idx):
         if folder_idx >= len(self.folder_inputs):
@@ -955,12 +1008,13 @@ class ImageSorterApp(QMainWindow):
         op_color = '#e67e22' if not self.copy_mode else '#27ae60'
         filename = os.path.basename(src_path)
 
-        # filename + arrow + folder in the main label; badge flashes on the right
-        self.operation_status_label.setText(f'{filename}  \u2192  {target_name}')
+        # filename + arrow + folder + op word in the main label; badge + overlay flash
+        self.operation_status_label.setText(f'{filename}  \u2192  {target_name}  [{op}]')
         self.operation_status_label.setStyleSheet('color: #ccc; font-size: 9pt; background: transparent;')
         self.operation_status_label.setTextFormat(Qt.PlainText)
 
-        self._animate_badge(op, op_color)  # FIX 4: animated flash
+        self._animate_badge(op, op_color)    # flash badge on the right of status bar
+        self._animate_overlay(op, op_color)  # large icon+text in top-right of preview
 
         self.update_previews()
 

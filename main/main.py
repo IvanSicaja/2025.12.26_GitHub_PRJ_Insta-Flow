@@ -83,7 +83,7 @@ class ImageSorterApp(QMainWindow):
         lbl_mode.setStyleSheet('QLabel { color: #444; font-size: 10pt; }')
         left_panel.addWidget(lbl_mode)
 
-        mode_desc = QLabel('COPY: duplicates image to target folder\nMOVE: removes image from source folder')
+        mode_desc = QLabel('COPY:  duplicates image to target folder\nMOVE: removes image from source folder')
         mode_desc.setStyleSheet('QLabel { color: #666; font-size: 9pt; margin-left: 6px; }')
         mode_desc.setWordWrap(False)
         left_panel.addWidget(mode_desc)
@@ -95,28 +95,35 @@ class ImageSorterApp(QMainWindow):
         self.mode_button.clicked.connect(self.toggle_mode)
         left_panel.addWidget(self.mode_button)
 
-        # 4. Target folders configuration
-        lbl_folders = QLabel('4. Configure target folders (press key 1–0 to sort):')
+        # 4. Setup sorting destination folders
+        lbl_folders = QLabel('4. Setup sorting target folders (folders where images will\n    be copied or moved)')
         lbl_folders.setStyleSheet('QLabel { color: #444; font-size: 10pt; }')
         lbl_folders.setWordWrap(True)
         left_panel.addWidget(lbl_folders)
 
+        lbl_key_instr = QLabel(
+            'Press keyboard keys (e.g.: 1,2,3...9, or custom configured letters e.g.: q,w,e...m) to instantly '
+            'sort the previewed image into the corresponding subfolder.'
+        )
+        lbl_key_instr.setStyleSheet('QLabel { color: #666; font-size: 9pt; margin-left: 6px; }')
+        lbl_key_instr.setWordWrap(True)
+        left_panel.addWidget(lbl_key_instr)
+
         # --- Sort destination folder ---
-        lbl_target_header = QLabel('Sorting destination folder:')
+        lbl_target_header = QLabel('\nSorting destination:')
         lbl_target_header.setStyleSheet('QLabel { color: #444; font-size: 10pt; }')
         left_panel.addWidget(lbl_target_header)
 
-        lbl_target_desc = QLabel(
-            'By default the subfolders defined below are created inside the folder '
-            'you opened in Step 1. Uncheck the box below to sort into a completely '
-            'different location instead.'
-        )
-        lbl_target_desc.setStyleSheet('QLabel { color: #666; font-size: 9pt; margin-left: 6px; }')
-        lbl_target_desc.setWordWrap(True)
-        left_panel.addWidget(lbl_target_desc)
+        lbl_checkbox_on  = QLabel('☑  Checked — target folder is the same as Step 1.')
+        lbl_checkbox_on.setStyleSheet('QLabel { color: #666; font-size: 9pt; margin-left: 6px; }')
+        left_panel.addWidget(lbl_checkbox_on)
+
+        lbl_checkbox_off = QLabel('☐  Unchecked — choose any custom target folder.\n')
+        lbl_checkbox_off.setStyleSheet('QLabel { color: #666; font-size: 9pt; margin-left: 6px; }')
+        left_panel.addWidget(lbl_checkbox_off)
 
         # Checkbox row
-        self.use_source_checkbox = QCheckBox('Use same folder as Step 1 (source folder)')
+        self.use_source_checkbox = QCheckBox('Use same folder as Step 1 for target folder)')
         self.use_source_checkbox.setChecked(True)
         self.use_source_checkbox.setFocusPolicy(Qt.NoFocus)
         self.use_source_checkbox.setStyleSheet("""
@@ -177,20 +184,27 @@ class ImageSorterApp(QMainWindow):
         left_panel.addLayout(target_row)
         # --- END destination folder block ---
 
-        # Icon legend — aligned using a fixed-width icon column
+        # Icon legend with bordered icon boxes for perfect alignment
+        ICON_BOX = (
+            'QLabel { color: #555; font-size: 9pt; border: 1px solid #bbb; '
+            'border-radius: 3px; background: #f8f8f8; padding: 1px; }'
+        )
+        LEGEND_TEXT = 'QLabel { color: #555; font-size: 9pt; }'
+
         legend_widget = QWidget()
         legend_layout = QVBoxLayout(legend_widget)
         legend_layout.setContentsMargins(6, 2, 0, 2)
-        legend_layout.setSpacing(1)
+        legend_layout.setSpacing(2)
 
-        for icon, desc in [('⌨', 'Edit shortcut key'), ('✎', 'Edit subfolder name')]:
+        for icon, desc in [('⌨', 'Press bellow to edit shortcut key'), ('✎', 'Press bellow to edit subfolder name')]:
             leg_row = QHBoxLayout()
-            leg_row.setSpacing(4)
+            leg_row.setSpacing(6)
             leg_icon = QLabel(icon)
-            leg_icon.setFixedWidth(18)
-            leg_icon.setStyleSheet('color: #555; font-size: 9pt;')
+            leg_icon.setFixedSize(20, 20)
+            leg_icon.setAlignment(Qt.AlignCenter)
+            leg_icon.setStyleSheet(ICON_BOX)
             leg_text = QLabel(desc)
-            leg_text.setStyleSheet('color: #555; font-size: 9pt;')
+            leg_text.setStyleSheet(LEGEND_TEXT)
             leg_row.addWidget(leg_icon)
             leg_row.addWidget(leg_text)
             leg_row.addStretch()
@@ -199,8 +213,8 @@ class ImageSorterApp(QMainWindow):
         left_panel.addWidget(legend_widget)
 
         lbl_load_desc = QLabel(
-            'Press "Load Subfolders" to import existing folder names automatically.\n'
-            'Press "Create Folders" to create any new names you typed below.'
+            'Press "Load Existing Subfolders (A-Z)" to import subfolder names from the target folder.\n'
+            '\nPress "Create Folders" to create the folders you typed below.\n'
         )
         lbl_load_desc.setStyleSheet('QLabel { color: #666; font-size: 9pt; margin-left: 6px; }')
         lbl_load_desc.setWordWrap(True)
@@ -356,9 +370,9 @@ class ImageSorterApp(QMainWindow):
         cur_bar_layout.setContentsMargins(10, 0, 10, 0)
         cur_bar_layout.setSpacing(0)
 
-        PREFIX_W = 66   # wide enough for "Last op:" at 9pt without clipping
+        PREFIX_W = 85   # wide enough for "Last op:" at 9pt without clipping
 
-        cur_bar_prefix = QLabel('Preview:')
+        cur_bar_prefix = QLabel('Preview:         ')
         cur_bar_prefix.setFixedWidth(PREFIX_W)
         cur_bar_prefix.setStyleSheet('color: #666; font-size: 9pt; background: transparent;')
         cur_bar_prefix.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
@@ -380,23 +394,23 @@ class ImageSorterApp(QMainWindow):
         status_bar_layout.setSpacing(0)
 
         # Prefix label — same fixed width as bar above so filenames align perfectly
-        op_prefix = QLabel('Last op:')
+        op_prefix = QLabel('Last operation:')
         op_prefix.setFixedWidth(PREFIX_W)
         op_prefix.setStyleSheet('color: #666; font-size: 9pt; background: transparent;')
         op_prefix.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         status_bar_layout.addWidget(op_prefix)
 
-        # Filename + arrow + folder (left-aligned, stretches)
-        self.operation_status_label = QLabel('Ready — press a number key (1–0) to sort the current image')
+        # Full-width operation status label (filename → folder  [OP])
+        self.operation_status_label = QLabel('Ready — press a key (1–0, Q, W…) to sort the current image')
         self.operation_status_label.setStyleSheet(TEXT_CSS)
         self.operation_status_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.operation_status_label.setMinimumWidth(0)
         status_bar_layout.addWidget(self.operation_status_label, 1)
 
-        # Operation badge (right-aligned, fixed)
+        # Keep badge label for API compatibility but give it zero width
         self.operation_badge_label = QLabel('')
-        self.operation_badge_label.setFixedWidth(54)
-        self.operation_badge_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.operation_badge_label.setStyleSheet('font-size: 9pt; font-weight: bold; background: transparent; color: transparent;')
+        self.operation_badge_label.setFixedWidth(0)
+        self.operation_badge_label.setStyleSheet('background: transparent; color: transparent;')
         status_bar_layout.addWidget(self.operation_badge_label)
 
         right_panel.addWidget(status_bar)
@@ -590,7 +604,7 @@ class ImageSorterApp(QMainWindow):
         pencil_btn.setFixedWidth(26)
         pencil_btn.setFixedHeight(28)
         pencil_btn.setStyleSheet(ICON_BTN.format(w=26) +
-            "QPushButton:checked { background-color: #fff3cd; border-color: #f0a500; color: #c0700a; }")
+            "QPushButton:checked { background-color: #dbeafe; border-color: #3b82f6; color: #1d4ed8; }")
         pencil_btn.setToolTip('Enable editing of folder name')
         pencil_btn.setFocusPolicy(Qt.NoFocus)
         pencil_btn.clicked.connect(self.on_pencil_clicked)
@@ -600,7 +614,10 @@ class ImageSorterApp(QMainWindow):
         edit = QLineEdit(default_name)
         edit.setEnabled(False)
         edit.setFixedHeight(28)
-        edit.setStyleSheet('QLineEdit { padding: 4px; border-radius: 5px; font-size: 9pt; }')
+        edit.setStyleSheet(
+            'QLineEdit { padding: 4px; border-radius: 5px; font-size: 9pt; border: 2px solid #ccc; }'
+            'QLineEdit:enabled { border: 2px solid #3b82f6; background: #f0f7ff; }'
+        )
         row.addWidget(edit)
 
         pencil_btn.toggled.connect(edit.setEnabled)
@@ -954,13 +971,14 @@ class ImageSorterApp(QMainWindow):
         op = 'MOVED' if not self.copy_mode else 'COPIED'
         op_color = '#e67e22' if not self.copy_mode else '#27ae60'
         filename = os.path.basename(src_path)
-        self.operation_status_label.setText(f'{filename}  →  {target_name}')
-        self.operation_status_label.setStyleSheet('color: #ccc; font-size: 9pt; background: transparent;')
-        self.operation_status_label.setTextFormat(Qt.PlainText)
-        self.operation_badge_label.setText(op)
-        self.operation_badge_label.setStyleSheet(
-            f'font-size: 9pt; font-weight: bold; background: transparent; color: {op_color};'
+        self.operation_status_label.setText(
+            f'{filename}  →  {target_name}    [{op}]'
         )
+        self.operation_status_label.setStyleSheet(
+            f'color: #ccc; font-size: 9pt; background: transparent;'
+        )
+        self.operation_status_label.setTextFormat(Qt.PlainText)
+        self.operation_badge_label.setText('')
 
         self.update_previews()
 

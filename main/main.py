@@ -355,7 +355,7 @@ class ImageSorterApp(QMainWindow):
         # Overlay label — top-right corner, shown briefly after each sort operation
         self.op_overlay_label = QLabel('')
         self.op_overlay_label.setAlignment(Qt.AlignCenter)
-        self.op_overlay_label.setStyleSheet('background: transparent; color: transparent;')
+        self.op_overlay_label.setStyleSheet('background: transparent; color: transparent; padding: 0px;')
         self.op_overlay_label.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         img_container_layout.addWidget(self.op_overlay_label, 0, 0,
                                         Qt.AlignTop | Qt.AlignRight)
@@ -937,23 +937,20 @@ class ImageSorterApp(QMainWindow):
         Show a large icon+text badge in the top-right corner of the preview image.
         COPIED → green  📋  COPIED
         MOVED  → orange ✂   MOVED
-        Animates: appear bright → fade to transparent over ~900 ms.
+        Animates: appear bright → fade to transparent over ~900 ms, then clears completely.
         """
         icon = '\U0001f4cb' if op_word == 'COPIED' else '\u2702'  # 📋 or ✂
         label_text = f'{icon}  {op_word}'
 
-        # Steps: fully visible → half → gone
         SHOW = (
             f'font-size: 15pt; font-weight: bold; background: transparent;'
-            f' color: {op_color}; padding: 8px 12px;'
-            f' border-radius: 8px;'
+            f' color: {op_color}; padding: 8px 12px; border-radius: 8px;'
         )
         HALF = (
             f'font-size: 15pt; font-weight: bold; background: transparent;'
-            f' color: rgba(180,180,180,160); padding: 8px 12px;'
-            f' border-radius: 8px;'
+            f' color: rgba(180,180,180,160); padding: 8px 12px; border-radius: 8px;'
         )
-        GONE = 'background: transparent; color: transparent; padding: 8px 12px;'
+        GONE = 'background: transparent; color: transparent; padding: 0px;'
 
         self.op_overlay_label.setText(label_text)
         self.op_overlay_label.setStyleSheet(SHOW)
@@ -965,7 +962,10 @@ class ImageSorterApp(QMainWindow):
 
         t2 = QTimer(self)
         t2.setSingleShot(True)
-        t2.timeout.connect(lambda: self.op_overlay_label.setStyleSheet(GONE))
+        def _clear():
+            self.op_overlay_label.setStyleSheet(GONE)
+            self.op_overlay_label.setText('')   # remove text so no space is reserved
+        t2.timeout.connect(_clear)
         t2.start(900)
 
     def handle_sort(self, folder_idx):

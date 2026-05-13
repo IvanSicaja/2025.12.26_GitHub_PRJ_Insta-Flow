@@ -83,9 +83,9 @@ class ImageSorterApp(QMainWindow):
         lbl_mode.setStyleSheet('QLabel { color: #444; font-size: 10pt; }')
         left_panel.addWidget(lbl_mode)
 
-        mode_desc = QLabel('COPY: duplicates image · MOVE: removes from source')
+        mode_desc = QLabel('COPY: duplicates image to target folder\nMOVE: removes image from source folder')
         mode_desc.setStyleSheet('QLabel { color: #666; font-size: 9pt; margin-left: 6px; }')
-        mode_desc.setWordWrap(True)
+        mode_desc.setWordWrap(False)
         left_panel.addWidget(mode_desc)
 
         self.mode_button = QPushButton('Mode: COPY')
@@ -174,9 +174,9 @@ class ImageSorterApp(QMainWindow):
         # --- END destination folder block ---
 
         # Sub-header and load button
-        sub_header = QLabel('Check ✎ to edit folder name · ⌨ to edit shortcut key')
-        sub_header.setStyleSheet('QLabel { color: #555; font-size: 9pt; }')
-        sub_header.setWordWrap(True)
+        sub_header = QLabel('⌨  Edit shortcut key\n✎  Edit folder name')
+        sub_header.setStyleSheet('QLabel { color: #555; font-size: 9pt; margin-left: 6px; }')
+        sub_header.setWordWrap(False)
         left_panel.addWidget(sub_header)
 
         self.load_folders_btn = QPushButton('Load Existing Subfolders (A-Z)')
@@ -196,6 +196,7 @@ class ImageSorterApp(QMainWindow):
         self.folder_inputs = []
         self.folder_enabled = []
         self.folder_keys = []
+        self.folder_del_btns = []
         self.folder_rows_widgets = []  # list of QWidget (each full row)
 
         # Container widget whose layout holds the rows
@@ -510,32 +511,36 @@ class ImageSorterApp(QMainWindow):
         """)
         row.addWidget(key_edit)
 
-        # ⌨ button to unlock key editing
+        # Shared style for all small icon buttons in a row
+        ICON_BTN = """
+            QPushButton {{
+                border-radius: 5px; border: 2px solid #aaa;
+                background: white; padding: 2px; font-size: 9pt; color: #444;
+                width: {w}px; height: 28px;
+            }}
+            QPushButton:checked {{ background-color: #e8e8e8; border-color: #888; }}
+            QPushButton:hover   {{ background-color: #f0f0f0; }}
+        """
+
+        # ⌨ button — unlock key editing
         key_btn = QPushButton('⌨')
         key_btn.setCheckable(True)
-        key_btn.setFixedWidth(24)
-        key_btn.setFixedHeight(30)
+        key_btn.setFixedWidth(26)
+        key_btn.setFixedHeight(28)
         key_btn.setFocusPolicy(Qt.NoFocus)
         key_btn.setToolTip('Edit the shortcut key for this folder')
-        key_btn.setStyleSheet("""
-            QPushButton { border-radius: 6px; border: 2px solid #aaa; font-size: 9pt;
-                          background: white; padding: 2px; color: #444; }
-            QPushButton:checked { background-color: #fff3cd; border-color: #f0a500; color: #c0700a; }
-            QPushButton:hover { background-color: #f5f5f5; }
-        """)
+        key_btn.setStyleSheet(ICON_BTN.format(w=26) +
+            "QPushButton:checked { background-color: #fff3cd; border-color: #f0a500; color: #c0700a; }")
         key_btn.toggled.connect(key_edit.setEnabled)
         key_btn.toggled.connect(lambda checked: self.on_pencil_clicked() if not checked else None)
         row.addWidget(key_btn)
 
-        # Pencil toggle for folder name
+        # ✎ button — unlock folder name editing
         pencil_btn = QPushButton('✎')
         pencil_btn.setCheckable(True)
-        pencil_btn.setFixedWidth(28)
-        pencil_btn.setFixedHeight(30)
-        pencil_btn.setStyleSheet("""
-            QPushButton { border-radius: 6px; border: 2px solid #aaa; padding: 2px; font-size: 9pt; }
-            QPushButton:checked { background-color: #e0e0e0; }
-        """)
+        pencil_btn.setFixedWidth(26)
+        pencil_btn.setFixedHeight(28)
+        pencil_btn.setStyleSheet(ICON_BTN.format(w=26))
         pencil_btn.setToolTip('Enable editing of folder name')
         pencil_btn.setFocusPolicy(Qt.NoFocus)
         pencil_btn.clicked.connect(self.on_pencil_clicked)
@@ -544,43 +549,47 @@ class ImageSorterApp(QMainWindow):
         # Folder name edit
         edit = QLineEdit(default_name)
         edit.setEnabled(False)
-        edit.setFixedHeight(30)
-        edit.setStyleSheet('QLineEdit { padding: 4px; border-radius: 6px; font-size: 9pt; }')
+        edit.setFixedHeight(28)
+        edit.setStyleSheet('QLineEdit { padding: 4px; border-radius: 5px; font-size: 9pt; }')
         row.addWidget(edit)
 
         pencil_btn.toggled.connect(edit.setEnabled)
 
-        # Up button
+        # ▲ up button
         up_btn = QPushButton('▲')
-        up_btn.setFixedWidth(22)
-        up_btn.setFixedHeight(30)
+        up_btn.setFixedWidth(20)
+        up_btn.setFixedHeight(28)
         up_btn.setFocusPolicy(Qt.NoFocus)
         up_btn.setToolTip('Move up')
-        up_btn.setStyleSheet("""
-            QPushButton { border-radius: 4px; border: 1px solid #ccc; font-size: 7pt;
-                          background: white; padding: 0px; }
-            QPushButton:hover { background-color: #e8e8e8; }
-        """)
+        up_btn.setStyleSheet(ICON_BTN.format(w=20))
         up_btn.clicked.connect(lambda _, w=row_widget: self._move_row_up(w))
         row.addWidget(up_btn)
 
-        # Down button
+        # ▼ down button
         dn_btn = QPushButton('▼')
-        dn_btn.setFixedWidth(22)
-        dn_btn.setFixedHeight(30)
+        dn_btn.setFixedWidth(20)
+        dn_btn.setFixedHeight(28)
         dn_btn.setFocusPolicy(Qt.NoFocus)
         dn_btn.setToolTip('Move down')
-        dn_btn.setStyleSheet("""
-            QPushButton { border-radius: 4px; border: 1px solid #ccc; font-size: 7pt;
-                          background: white; padding: 0px; }
-            QPushButton:hover { background-color: #e8e8e8; }
-        """)
+        dn_btn.setStyleSheet(ICON_BTN.format(w=20))
         dn_btn.clicked.connect(lambda _, w=row_widget: self._move_row_dn(w))
         row.addWidget(dn_btn)
 
+        # × delete button
+        del_btn = QPushButton('×')
+        del_btn.setFixedWidth(22)
+        del_btn.setFixedHeight(28)
+        del_btn.setFocusPolicy(Qt.NoFocus)
+        del_btn.setToolTip('Remove this key–folder pair')
+        del_btn.setStyleSheet(ICON_BTN.format(w=22) +
+            "QPushButton:hover { background-color: #ffe0e0; border-color: #e88; color: #c00; }")
+        del_btn.clicked.connect(lambda _, w=row_widget: self._delete_row(w))
+        row.addWidget(del_btn)
+
         self.folder_inputs.append(edit)
         self.folder_enabled.append(pencil_btn)
-        self.folder_keys.append(key_edit)   # track key edit widgets
+        self.folder_keys.append(key_edit)
+        self.folder_del_btns.append(del_btn)
         self.folder_rows_widgets.append(row_widget)
         self.folder_rows_layout.addWidget(row_widget)
 
@@ -607,8 +616,23 @@ class ImageSorterApp(QMainWindow):
                     if current_val in self.KEY_SEQUENCE:
                         key_edit_widget.setText(old_default)
 
+    def _delete_row(self, row_widget):
+        if len(self.folder_rows_widgets) <= 1:
+            return  # always keep at least one row
+        idx = self.folder_rows_widgets.index(row_widget)
+        self.folder_rows_layout.removeWidget(row_widget)
+        row_widget.setParent(None)
+        self.folder_rows_widgets.pop(idx)
+        self.folder_inputs.pop(idx)
+        self.folder_enabled.pop(idx)
+        self.folder_keys.pop(idx)
+        self.folder_del_btns.pop(idx)
+        self._refresh_key_labels()
+        self.centralWidget().setFocus()
+
     def _swap_rows(self, i, j):
-        for lst in (self.folder_rows_widgets, self.folder_inputs, self.folder_enabled, self.folder_keys):
+        for lst in (self.folder_rows_widgets, self.folder_inputs,
+                    self.folder_enabled, self.folder_keys, self.folder_del_btns):
             lst[i], lst[j] = lst[j], lst[i]
         for w in self.folder_rows_widgets:
             self.folder_rows_layout.removeWidget(w)
@@ -690,6 +714,7 @@ class ImageSorterApp(QMainWindow):
             self.folder_inputs.clear()
             self.folder_enabled.clear()
             self.folder_keys.clear()
+            self.folder_del_btns.clear()
 
             # Add exactly as many rows as subfolders found (minimum 1)
             count = max(len(subfolders), 1)

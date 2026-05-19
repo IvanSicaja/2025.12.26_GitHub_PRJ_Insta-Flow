@@ -1,6 +1,8 @@
 import sys
 import os
 import shutil
+import threading
+from collections import OrderedDict
 from datetime import datetime
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QPushButton,
@@ -13,6 +15,80 @@ from PyQt5.QtCore import Qt, QSettings, QTimer
 IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.bmp', '.gif')
 LOG_FILENAME = 'instaflow_log.txt'
 MAX_LOG_ENTRIES = 10
+CACHE_SIZE = 20        # max pixmaps kept in memory
+PRELOAD_AHEAD  = 6    # how many images to preload ahead of current index
+PRELOAD_BEHIND = 3    # how many images to keep behind current index
+
+
+class PixmapCache:
+    """
+    Background thread that preloads full-size QPixmaps for images around
+    the current index.  All public methods are thread-safe.
+    """
+
+    def __init__(self):
+        self._cache: OrderedDict[str, QPixmap] = OrderedDict()
+        self._lock = threading.Lock()
+        self._thread: threading.Thread | None = None
+        self._stop_event = threading.Event()
+
+    def start_preload(self, folder: str, images: list[str], center_idx: int):
+        """Stop any running preload and start a new one centred on center_idx."""
+        self._stop_event.set()                    # signal old thread to stop
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=0.5)        # wait briefly
+
+        self._stop_event.clear()
+        self._thread = threading.Thread(
+            target=self._worker,
+            args=(folder, images, center_idx),
+            daemon=True,
+        )
+        self._thread.start()
+
+    def _worker(self, folder: str, images: list[str], center_idx: int):
+        """Load pixmaps in order of proximity to center_idx."""
+        total = len(images)
+        # Build priority order: current, then alternating ahead/behind
+        order = [center_idx]
+        for delta in range(1, max(PRELOAD_AHEAD, PRELOAD_BEHIND) + 1):
+            if delta <= PRELOAD_AHEAD and center_idx + delta < total:
+                order.append(center_idx + delta)
+            if delta <= PRELOAD_BEHIND and center_idx - delta >= 0:
+                order.append(center_idx - delta)
+
+        for idx in order:
+            if self._stop_event.is_set():
+                return
+            path = os.path.join(folder, images[idx])
+            with self._lock:
+                if path in self._cache:
+                    self._cache.move_to_end(path)
+                    continue
+            # Load outside the lock so other threads aren't blocked
+            pix = QPixmap(path)
+            if pix.isNull():
+                continue
+            with self._lock:
+                self._cache[path] = pix
+                self._cache.move_to_end(path)
+                while len(self._cache) > CACHE_SIZE:
+                    self._cache.popitem(last=False)
+
+    def get(self, path: str) -> QPixmap | None:
+        """Return cached pixmap or None if not yet loaded."""
+        with self._lock:
+            if path in self._cache:
+                self._cache.move_to_end(path)
+                return self._cache[path]
+        return None
+
+    def clear(self):
+        """Discard all cached pixmaps and stop the worker."""
+        self._stop_event.set()
+        with self._lock:
+            self._cache.clear()
+
 
 
 class ImageSorterApp(QMainWindow):
@@ -28,6 +104,7 @@ class ImageSorterApp(QMainWindow):
         self.current_index = 0
         self.copy_mode = True
         self.folder_keys = []
+        self._pix_cache = PixmapCache()   # background preloader
         self.settings = QSettings('ImageSorterApp', 'Settings')
         self._build_ui()
         self.update_mode_button_style()
@@ -739,6 +816,8 @@ class ImageSorterApp(QMainWindow):
             return
 
         self.current_index = 0
+        self._pix_cache.clear()
+        self._pix_cache.start_preload(folder, self.images, 0)
         self.update_previews()
         if self.use_source_checkbox.isChecked():
             self.target_folder_display.setText(folder)
@@ -853,7 +932,10 @@ class ImageSorterApp(QMainWindow):
         self.current_image_name_label.setText(current_name)
 
         img_path = os.path.join(self.current_folder, current_name)
-        pix = QPixmap(img_path)
+        # Try cache first; fall back to direct load (blocks briefly only on cache miss)
+        pix = self._pix_cache.get(img_path)
+        if pix is None:
+            pix = QPixmap(img_path)
         self.main_image_label.setPixmap(pix.scaled(
             self.main_image_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
         ))
@@ -862,7 +944,10 @@ class ImageSorterApp(QMainWindow):
         for lbl, off in zip(self.secondary_labels, offsets):
             idx = self.current_index + off
             if 0 <= idx < len(self.images):
-                p = QPixmap(os.path.join(self.current_folder, self.images[idx]))
+                thumb_path = os.path.join(self.current_folder, self.images[idx])
+                p = self._pix_cache.get(thumb_path)
+                if p is None:
+                    p = QPixmap(thumb_path)
                 lbl.setPixmap(p.scaled(110, 110, Qt.KeepAspectRatio, Qt.SmoothTransformation))
             else:
                 lbl.clear()
@@ -880,11 +965,13 @@ class ImageSorterApp(QMainWindow):
         if key == Qt.Key_Right:
             self.current_index = min(self.current_index + 1, len(self.images) - 1)
             self.update_previews()
+            self._pix_cache.start_preload(self.current_folder, self.images, self.current_index)
             event.accept()
             return
         elif key == Qt.Key_Left:
             self.current_index = max(self.current_index - 1, 0)
             self.update_previews()
+            self._pix_cache.start_preload(self.current_folder, self.images, self.current_index)
             event.accept()
             return
 
@@ -1017,6 +1104,8 @@ class ImageSorterApp(QMainWindow):
         self._animate_overlay(op, op_color)  # large icon+text in top-right of preview
 
         self.update_previews()
+        if self.images:
+            self._pix_cache.start_preload(self.current_folder, self.images, self.current_index)
 
         if not self.copy_mode and was_last_image:
             self.operation_status_label.setText('No more images to sort in the source folder.')

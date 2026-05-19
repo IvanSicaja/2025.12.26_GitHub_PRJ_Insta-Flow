@@ -4,20 +4,131 @@ import shutil
 import threading
 from collections import OrderedDict
 from datetime import datetime
-from PyQt5.QtWidgets import (
+from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QPushButton,
     QFileDialog, QHBoxLayout, QVBoxLayout, QGridLayout, QLineEdit,
     QMessageBox, QSpacerItem, QSizePolicy, QScrollArea, QCheckBox
 )
-from PyQt5.QtGui import QPixmap, QIcon
-from PyQt5.QtCore import Qt, QSettings, QTimer
+from PyQt6.QtGui import QPixmap, QIcon, QImage
+from PyQt6.QtCore import Qt, QSettings, QTimer
 
-IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.bmp', '.gif')
+try:
+    import rawpy
+    import numpy as np
+    _RAWPY_AVAILABLE = True
+    print(f'[InstaFlow] rawpy {rawpy.__version__} — RAW format support enabled')
+except ImportError as e:
+    _RAWPY_AVAILABLE = False
+    print(f'[InstaFlow] rawpy not found — RAW formats (ARW, DNG, NEF …) will not preview.\n'
+          f'           Fix: pip install rawpy numpy   (in your venv)')
+
+# Extensions that require rawpy to decode (Qt cannot render these natively)
+RAW_EXTENSIONS = {
+    '.arw', '.cr2', '.cr3', '.nef', '.nrw', '.orf', '.rw2',
+    '.pef', '.srw', '.dng', '.raf', '.raw', '.3fr', '.iiq',
+    '.erf', '.mrw', '.x3f',
+}
+
+IMAGE_EXTENSIONS = (
+    # JPEG
+    '.jpg', '.jpeg', '.jpe', '.jfif',
+    # PNG
+    '.png',
+    # BMP / DIB
+    '.bmp', '.dib',
+    # GIF
+    '.gif',
+    # TIFF
+    '.tif', '.tiff',
+    # WebP
+    '.webp',
+    # HEIF / HEIC  (iOS / modern cameras)
+    '.heif', '.heic',
+    # RAW formats
+    '.raw', '.arw',   # Sony
+    '.cr2', '.cr3',   # Canon
+    '.nef', '.nrw',   # Nikon
+    '.orf',           # Olympus
+    '.rw2',           # Panasonic
+    '.pef',           # Pentax
+    '.srw',           # Samsung
+    '.dng',           # Adobe DNG (universal RAW)
+    '.raf',           # Fujifilm
+    '.3fr',           # Hasselblad
+    '.iiq',           # Phase One
+    '.erf',           # Epson
+    '.mrw',           # Konica-Minolta
+    '.x3f',           # Sigma
+    # Other common formats
+    '.ico',
+    '.tga',
+    '.psd',           # Photoshop (flattened)
+    '.xcf',           # GIMP
+    '.ppm', '.pgm', '.pbm', '.pnm',   # Netpbm
+    '.svg',           # vector (Qt can render these)
+    '.svgz',
+)
 LOG_FILENAME = 'instaflow_log.txt'
 MAX_LOG_ENTRIES = 10
 CACHE_SIZE = 20        # max pixmaps kept in memory
 PRELOAD_AHEAD  = 6    # how many images to preload ahead of current index
 PRELOAD_BEHIND = 3    # how many images to keep behind current index
+
+
+def _suppress_fd2():
+    """Context manager that redirects file-descriptor 2 (C-level stderr) to /dev/null."""
+    import contextlib, os as _os
+
+    @contextlib.contextmanager
+    def _cm():
+        devnull = _os.open(_os.devnull, _os.O_WRONLY)
+        old_fd = _os.dup(2)
+        _os.dup2(devnull, 2)
+        _os.close(devnull)
+        try:
+            yield
+        finally:
+            _os.dup2(old_fd, 2)
+            _os.close(old_fd)
+
+    return _cm()
+
+
+def load_pixmap(path: str) -> QPixmap:
+    """
+    Load any image file as a QPixmap.
+    RAW formats decoded with rawpy; everything else via QPixmap directly.
+    """
+    ext = os.path.splitext(path)[1].lower()
+
+    if ext in RAW_EXTENSIONS:
+        if not _RAWPY_AVAILABLE:
+            return QPixmap()   # rawpy missing — startup message already told user
+        try:
+            with _suppress_fd2():
+                with rawpy.imread(path) as raw:
+                    rgb = raw.postprocess(
+                        use_camera_wb=True,
+                        half_size=True,
+                        no_auto_bright=False,
+                        output_bps=8,
+                    )
+            h, w, ch = rgb.shape
+            buf = bytes(rgb)
+            bpl = ch * w
+            qimg = QImage(buf, w, h, bpl, QImage.Format.Format_RGB888)
+            pix = QPixmap.fromImage(qimg.copy())
+            if pix.isNull():
+                print(f'[InstaFlow] Warning: could not render {os.path.basename(path)}')
+            return pix
+        except Exception as e:
+            print(f'[InstaFlow] Error loading {os.path.basename(path)}: {type(e).__name__}: {e}')
+            return QPixmap()
+    else:
+        pix = QPixmap(path)
+        if not pix.isNull():
+            return pix
+        return QPixmap()
 
 
 class PixmapCache:
@@ -66,7 +177,7 @@ class PixmapCache:
                     self._cache.move_to_end(path)
                     continue
             # Load outside the lock so other threads aren't blocked
-            pix = QPixmap(path)
+            pix = load_pixmap(path)
             if pix.isNull():
                 continue
             with self._lock:
@@ -119,15 +230,15 @@ class ImageSorterApp(QMainWindow):
         # LEFT PANEL - scrollable
         left_scroll = QScrollArea()
         left_scroll.setWidgetResizable(True)
-        left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        left_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        left_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         left_scroll.setStyleSheet('QScrollArea { background-color: #f8f8f8; border: none; }')
 
         left_content = QWidget()
-        left_content.setFocusPolicy(Qt.ClickFocus)
+        left_content.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
         left_content.mousePressEvent = lambda e: self.centralWidget().setFocus()
         left_panel = QVBoxLayout(left_content)
-        left_panel.setAlignment(Qt.AlignTop)
+        left_panel.setAlignment(Qt.AlignmentFlag.AlignTop)
         left_panel.setSpacing(5)
         left_panel.setContentsMargins(12, 12, 12, 12)
 
@@ -138,7 +249,7 @@ class ImageSorterApp(QMainWindow):
         left_panel.addWidget(lbl1)
 
         self.open_btn = QPushButton('Open Folder')
-        self.open_btn.setFocusPolicy(Qt.NoFocus)
+        self.open_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.open_btn.setFixedHeight(32)
         self.open_btn.setStyleSheet("""
             QPushButton {
@@ -171,7 +282,7 @@ class ImageSorterApp(QMainWindow):
 
         self.mode_button = QPushButton('Mode: COPY')
         self.mode_button.setCheckable(True)
-        self.mode_button.setFocusPolicy(Qt.NoFocus)
+        self.mode_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.mode_button.setFixedHeight(32)
         self.mode_button.clicked.connect(self.toggle_mode)
         left_panel.addWidget(self.mode_button)
@@ -210,7 +321,7 @@ class ImageSorterApp(QMainWindow):
         # Checkbox row — sits directly below its explanations
         self.use_source_checkbox = QCheckBox('Use same folder as Step 1 for target folder')
         self.use_source_checkbox.setChecked(True)
-        self.use_source_checkbox.setFocusPolicy(Qt.NoFocus)
+        self.use_source_checkbox.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.use_source_checkbox.setStyleSheet("""
             QCheckBox {
                 color: #111;
@@ -246,7 +357,7 @@ class ImageSorterApp(QMainWindow):
         target_row.addWidget(self.target_folder_display)
 
         self.select_target_btn = QPushButton('\u2026')
-        self.select_target_btn.setFocusPolicy(Qt.NoFocus)
+        self.select_target_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.select_target_btn.setFixedWidth(32)
         self.select_target_btn.setMinimumHeight(32)
         self.select_target_btn.setToolTip('Browse for target folder')
@@ -286,7 +397,7 @@ class ImageSorterApp(QMainWindow):
             leg_row.setSpacing(6)
             leg_icon = QLabel(icon)
             leg_icon.setFixedSize(20, 20)
-            leg_icon.setAlignment(Qt.AlignCenter)
+            leg_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
             leg_icon.setStyleSheet(ICON_BOX)
             leg_text = QLabel(desc)
             leg_text.setStyleSheet(LEGEND_TEXT)
@@ -308,7 +419,7 @@ class ImageSorterApp(QMainWindow):
         left_panel.addWidget(lbl_load_desc)
 
         self.load_folders_btn = QPushButton('Load Existing Subfolders (A-Z)')
-        self.load_folders_btn.setFocusPolicy(Qt.NoFocus)
+        self.load_folders_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.load_folders_btn.setFixedHeight(32)
         self.load_folders_btn.setStyleSheet("""
             QPushButton {
@@ -328,7 +439,7 @@ class ImageSorterApp(QMainWindow):
 
         lbl_col_key = QLabel('Key')
         lbl_col_key.setFixedWidth(28)
-        lbl_col_key.setAlignment(Qt.AlignCenter)
+        lbl_col_key.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl_col_key.setStyleSheet('color: #888; font-size: 8pt; font-weight: bold;')
         col_header_layout.addWidget(lbl_col_key)
 
@@ -358,7 +469,7 @@ class ImageSorterApp(QMainWindow):
             self._add_folder_row(default_names[i])
 
         self.add_row_btn = QPushButton('\uff0b  Add another key\u2013folder pair')
-        self.add_row_btn.setFocusPolicy(Qt.NoFocus)
+        self.add_row_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.add_row_btn.setFixedHeight(30)
         self.add_row_btn.setStyleSheet("""
             QPushButton {
@@ -372,7 +483,7 @@ class ImageSorterApp(QMainWindow):
         left_panel.addWidget(self.add_row_btn)
 
         self.create_folders_btn = QPushButton('Create Folders')
-        self.create_folders_btn.setFocusPolicy(Qt.NoFocus)
+        self.create_folders_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.create_folders_btn.setFixedHeight(32)
         self.create_folders_btn.setStyleSheet("""
             QPushButton {
@@ -384,7 +495,7 @@ class ImageSorterApp(QMainWindow):
         self.create_folders_btn.clicked.connect(self.create_folders)
         left_panel.addWidget(self.create_folders_btn)
 
-        left_panel.addSpacerItem(QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding))
+        left_panel.addSpacerItem(QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
 
         left_scroll.setWidget(left_content)
         left_scroll.setFixedWidth(360)
@@ -412,7 +523,7 @@ class ImageSorterApp(QMainWindow):
 
         self.source_folder_bar_label = QLabel('No folder selected \u2014 use Step 1 to open a folder')
         self.source_folder_bar_label.setStyleSheet('color: #ccc; font-size: 9pt; background: transparent;')
-        self.source_folder_bar_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.source_folder_bar_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         source_bar_layout.addWidget(self.source_folder_bar_label, 1)
 
         right_panel.addWidget(source_bar)
@@ -425,17 +536,17 @@ class ImageSorterApp(QMainWindow):
         img_container_layout.setSpacing(0)
 
         self.main_image_label = QLabel()
-        self.main_image_label.setAlignment(Qt.AlignCenter)
+        self.main_image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.main_image_label.setStyleSheet('background-color: #222; border: 2px solid #444;')
         img_container_layout.addWidget(self.main_image_label, 0, 0)  # fills entire cell
 
         # Overlay label — top-right corner, shown briefly after each sort operation
         self.op_overlay_label = QLabel('')
-        self.op_overlay_label.setAlignment(Qt.AlignCenter)
+        self.op_overlay_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.op_overlay_label.setStyleSheet('background: transparent; color: transparent; padding: 0px;')
-        self.op_overlay_label.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        self.op_overlay_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         img_container_layout.addWidget(self.op_overlay_label, 0, 0,
-                                        Qt.AlignTop | Qt.AlignRight)
+                                        alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
 
         right_panel.addWidget(img_container, stretch=8)
 
@@ -447,7 +558,7 @@ class ImageSorterApp(QMainWindow):
         for _ in range(5):
             lbl = QLabel()
             lbl.setFixedSize(120, 120)
-            lbl.setAlignment(Qt.AlignCenter)
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             lbl.setStyleSheet('background-color: #444; border: 1px solid #555; border-radius: 6px;')
             self.secondary_labels.append(lbl)
             self.secondary_layout.addWidget(lbl)
@@ -471,12 +582,12 @@ class ImageSorterApp(QMainWindow):
         cur_bar_prefix = QLabel('Preview:')
         cur_bar_prefix.setFixedWidth(PREFIX_W)
         cur_bar_prefix.setStyleSheet('color: #666; font-size: 9pt; background: transparent;')
-        cur_bar_prefix.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        cur_bar_prefix.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         cur_bar_layout.addWidget(cur_bar_prefix)
 
         self.current_image_name_label = QLabel('\u2014')
         self.current_image_name_label.setStyleSheet(TEXT_CSS)
-        self.current_image_name_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.current_image_name_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         cur_bar_layout.addWidget(self.current_image_name_label, 1)
 
         right_panel.addWidget(cur_bar)
@@ -492,19 +603,19 @@ class ImageSorterApp(QMainWindow):
         op_prefix = QLabel('Last operation:')
         op_prefix.setFixedWidth(PREFIX_W)
         op_prefix.setStyleSheet('color: #666; font-size: 9pt; background: transparent;')
-        op_prefix.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        op_prefix.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         status_bar_layout.addWidget(op_prefix)
 
         # filename → folder (stretches to fill)
         self.operation_status_label = QLabel('Ready \u2014 press a key (1\u20130, Q, W\u2026) to sort the current image')
         self.operation_status_label.setStyleSheet(TEXT_CSS)
-        self.operation_status_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.operation_status_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         status_bar_layout.addWidget(self.operation_status_label, 1)
 
         # FIX 4: op badge right-aligned, fixed width; animated via _animate_badge()
         self.operation_badge_label = QLabel('')
         self.operation_badge_label.setFixedWidth(62)
-        self.operation_badge_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.operation_badge_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.operation_badge_label.setStyleSheet(
             'font-size: 9pt; font-weight: bold; background: transparent; color: transparent;'
         )
@@ -514,14 +625,14 @@ class ImageSorterApp(QMainWindow):
 
         right_container = QWidget()
         right_container.setLayout(right_panel)
-        right_container.setFocusPolicy(Qt.StrongFocus)
+        right_container.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         right_container.mousePressEvent = lambda e: right_container.setFocus()
         root_layout.addWidget(right_container, 1)
 
     # --- Target folder methods ---
 
     def on_use_source_toggled(self, state):
-        checked = (state == Qt.Checked)
+        checked = (state == Qt.CheckState.Checked)
         if checked:
             self.target_base_folder = None
             self.settings.remove('last_target_folder')
@@ -638,7 +749,7 @@ class ImageSorterApp(QMainWindow):
         key_edit.setFixedWidth(28)
         key_edit.setFixedHeight(30)
         key_edit.setEnabled(False)
-        key_edit.setAlignment(Qt.AlignCenter)
+        key_edit.setAlignment(Qt.AlignmentFlag.AlignCenter)
         key_edit.setMaxLength(2)
         key_edit.setStyleSheet("""
             QLineEdit {
@@ -667,7 +778,7 @@ class ImageSorterApp(QMainWindow):
         key_btn.setCheckable(True)
         key_btn.setFixedWidth(26)
         key_btn.setFixedHeight(28)
-        key_btn.setFocusPolicy(Qt.NoFocus)
+        key_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         key_btn.setToolTip('Edit the shortcut key for this folder')
         key_btn.setStyleSheet(ICON_BTN.format(w=26) +
             'QPushButton:checked { background-color: #fff3cd; border-color: #f0a500; color: #c0700a; }')
@@ -682,7 +793,7 @@ class ImageSorterApp(QMainWindow):
         pencil_btn.setStyleSheet(ICON_BTN.format(w=26) +
             'QPushButton:checked { background-color: #dbeafe; border-color: #3b82f6; color: #1d4ed8; }')
         pencil_btn.setToolTip('Enable editing of folder name')
-        pencil_btn.setFocusPolicy(Qt.NoFocus)
+        pencil_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         pencil_btn.clicked.connect(self.on_pencil_clicked)
         row.addWidget(pencil_btn)
 
@@ -700,7 +811,7 @@ class ImageSorterApp(QMainWindow):
         up_btn = QPushButton('\u25b2')
         up_btn.setFixedWidth(20)
         up_btn.setFixedHeight(28)
-        up_btn.setFocusPolicy(Qt.NoFocus)
+        up_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         up_btn.setToolTip('Move up')
         up_btn.setStyleSheet(ICON_BTN.format(w=20))
         up_btn.clicked.connect(lambda _, w=row_widget: self._move_row_up(w))
@@ -709,7 +820,7 @@ class ImageSorterApp(QMainWindow):
         dn_btn = QPushButton('\u25bc')
         dn_btn.setFixedWidth(20)
         dn_btn.setFixedHeight(28)
-        dn_btn.setFocusPolicy(Qt.NoFocus)
+        dn_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         dn_btn.setToolTip('Move down')
         dn_btn.setStyleSheet(ICON_BTN.format(w=20))
         dn_btn.clicked.connect(lambda _, w=row_widget: self._move_row_dn(w))
@@ -718,7 +829,7 @@ class ImageSorterApp(QMainWindow):
         del_btn = QPushButton('\xd7')
         del_btn.setFixedWidth(22)
         del_btn.setFixedHeight(28)
-        del_btn.setFocusPolicy(Qt.NoFocus)
+        del_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         del_btn.setToolTip('Remove this key\u2013folder pair')
         del_btn.setStyleSheet(ICON_BTN.format(w=22) +
             'QPushButton:hover { background-color: #ffe0e0; border-color: #e88; color: #c00; }')
@@ -935,9 +1046,9 @@ class ImageSorterApp(QMainWindow):
         # Try cache first; fall back to direct load (blocks briefly only on cache miss)
         pix = self._pix_cache.get(img_path)
         if pix is None:
-            pix = QPixmap(img_path)
+            pix = load_pixmap(img_path)
         self.main_image_label.setPixmap(pix.scaled(
-            self.main_image_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
+            self.main_image_label.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
         ))
 
         offsets = [-2, -1, 0, 1, 2]
@@ -947,13 +1058,13 @@ class ImageSorterApp(QMainWindow):
                 thumb_path = os.path.join(self.current_folder, self.images[idx])
                 p = self._pix_cache.get(thumb_path)
                 if p is None:
-                    p = QPixmap(thumb_path)
-                lbl.setPixmap(p.scaled(110, 110, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                    p = load_pixmap(thumb_path)
+                lbl.setPixmap(p.scaled(110, 110, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
             else:
                 lbl.clear()
 
     def keyPressEvent(self, event):
-        if isinstance(self.focusWidget(), QLineEdit) and event.key() in (Qt.Key_Left, Qt.Key_Right):
+        if isinstance(self.focusWidget(), QLineEdit) and event.key() in (Qt.Key.Key_Left, Qt.Key.Key_Right):
             self.focusWidget().event(event)
             return
 
@@ -962,13 +1073,13 @@ class ImageSorterApp(QMainWindow):
             return
 
         key = event.key()
-        if key == Qt.Key_Right:
+        if key == Qt.Key.Key_Right:
             self.current_index = min(self.current_index + 1, len(self.images) - 1)
             self.update_previews()
             self._pix_cache.start_preload(self.current_folder, self.images, self.current_index)
             event.accept()
             return
-        elif key == Qt.Key_Left:
+        elif key == Qt.Key.Key_Left:
             self.current_index = max(self.current_index - 1, 0)
             self.update_previews()
             self._pix_cache.start_preload(self.current_folder, self.images, self.current_index)
@@ -980,11 +1091,11 @@ class ImageSorterApp(QMainWindow):
             return
 
         key_char = None
-        if Qt.Key_1 <= key <= Qt.Key_9:
-            key_char = str(key - Qt.Key_0)
-        elif key == Qt.Key_0:
+        if Qt.Key.Key_1.value <= key <= Qt.Key.Key_9.value:
+            key_char = str(key - Qt.Key.Key_0.value)
+        elif key == Qt.Key.Key_0.value:
             key_char = '0'
-        elif Qt.Key_A <= key <= Qt.Key_Z:
+        elif Qt.Key.Key_A.value <= key <= Qt.Key.Key_Z.value:
             key_char = chr(key).lower()
 
         if key_char is not None:
@@ -1098,7 +1209,7 @@ class ImageSorterApp(QMainWindow):
         # filename + arrow + folder + op word in the main label; badge + overlay flash
         self.operation_status_label.setText(f'{filename}  \u2192  {target_name}  [{op}]')
         self.operation_status_label.setStyleSheet('color: #ccc; font-size: 9pt; background: transparent;')
-        self.operation_status_label.setTextFormat(Qt.PlainText)
+        self.operation_status_label.setTextFormat(Qt.TextFormat.PlainText)
 
         self._animate_badge(op, op_color)    # flash badge on the right of status bar
         self._animate_overlay(op, op_color)  # large icon+text in top-right of preview
@@ -1118,4 +1229,4 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
     window = ImageSorterApp()
     window.showMaximized()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

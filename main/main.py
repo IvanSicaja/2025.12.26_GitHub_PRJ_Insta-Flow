@@ -4,6 +4,8 @@ import shutil
 import threading
 from collections import OrderedDict
 from datetime import datetime
+
+# Third-party — install with: pip install PyQt6 rawpy numpy
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QPushButton,
     QFileDialog, QHBoxLayout, QVBoxLayout, QGridLayout, QLineEdit,
@@ -11,16 +13,8 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QPixmap, QIcon, QImage
 from PyQt6.QtCore import Qt, QSettings, QTimer
-
-try:
-    import rawpy
-    import numpy as np
-    _RAWPY_AVAILABLE = True
-    print(f'[InstaFlow] rawpy {rawpy.__version__} — RAW format support enabled')
-except ImportError as e:
-    _RAWPY_AVAILABLE = False
-    print(f'[InstaFlow] rawpy not found — RAW formats (ARW, DNG, NEF …) will not preview.\n'
-          f'           Fix: pip install rawpy numpy   (in your venv)')
+import rawpy          # pip install rawpy
+import numpy as np    # pip install numpy
 
 # Extensions that require rawpy to decode (Qt cannot render these natively)
 RAW_EXTENSIONS = {
@@ -102,8 +96,6 @@ def load_pixmap(path: str) -> QPixmap:
     ext = os.path.splitext(path)[1].lower()
 
     if ext in RAW_EXTENSIONS:
-        if not _RAWPY_AVAILABLE:
-            return QPixmap()   # rawpy missing — startup message already told user
         try:
             with _suppress_fd2():
                 with rawpy.imread(path) as raw:
@@ -548,6 +540,30 @@ class ImageSorterApp(QMainWindow):
         img_container_layout.addWidget(self.op_overlay_label, 0, 0,
                                         alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
 
+        # Delete button — bottom-right corner of the preview image
+        self.delete_btn = QPushButton('🗑  Delete  [D]')
+        self.delete_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.delete_btn.setFixedHeight(30)
+        self.delete_btn.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(40, 40, 40, 210);
+                color: #ff6b6b;
+                font-size: 9pt;
+                font-weight: bold;
+                border: 1px solid #ff6b6b;
+                border-radius: 5px;
+                padding: 2px 10px;
+            }
+            QPushButton:hover {
+                background-color: rgba(180, 40, 40, 230);
+                color: white;
+                border-color: white;
+            }
+        """)
+        self.delete_btn.clicked.connect(self.delete_current_image)
+        img_container_layout.addWidget(self.delete_btn, 0, 0,
+                                        alignment=Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignRight)
+
         right_panel.addWidget(img_container, stretch=8)
 
         self.secondary_layout = QHBoxLayout()
@@ -720,6 +736,80 @@ class ImageSorterApp(QMainWindow):
                 f.write('\n'.join(updated_entries) + '\n')
         except Exception as e:
             print(f'Warning: could not write log file: {e}')
+
+    def write_delete_log_entry(self, deleted_path: str):
+        """Log a DELETE operation to the target base folder's log file."""
+        target_base = self.get_effective_target_folder()
+        if not target_base:
+            return
+        log_path = os.path.join(target_base, LOG_FILENAME)
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        new_entry = f'[{timestamp}]  DELETE  {deleted_path}'
+
+        existing_entries = []
+        if os.path.exists(log_path):
+            try:
+                with open(log_path, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line:
+                            existing_entries.append(line)
+            except Exception:
+                existing_entries = []
+
+        updated_entries = [new_entry] + existing_entries
+        updated_entries = updated_entries[:MAX_LOG_ENTRIES]
+
+        try:
+            with open(log_path, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(updated_entries) + '\n')
+        except Exception as e:
+            print(f'Warning: could not write log file: {e}')
+
+    def delete_current_image(self):
+        """Permanently delete the currently previewed image after confirmation."""
+        if not self.images:
+            return
+
+        filename = self.images[self.current_index]
+        src_path = os.path.join(self.current_folder, filename)
+
+        reply = QMessageBox.question(
+            self,
+            'Delete Image',
+            f'Permanently delete this file?\n\n{filename}\n\nThis cannot be undone.',
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        try:
+            os.remove(src_path)
+        except Exception as e:
+            QMessageBox.critical(self, 'Error', f'Could not delete file:\n{e}')
+            return
+
+        # Remove from image list and advance
+        del self.images[self.current_index]
+        if self.images:
+            self.current_index = min(self.current_index, len(self.images) - 1)
+
+        # Log the deletion
+        self.write_delete_log_entry(src_path)
+
+        # Update status bar
+        self.operation_status_label.setText(f'{filename}  [DELETED]')
+        self.operation_status_label.setStyleSheet('color: #ff6b6b; font-size: 9pt; background: transparent;')
+        self.operation_badge_label.setText('')
+
+        self.update_previews()
+        if self.images:
+            self._pix_cache.start_preload(self.current_folder, self.images, self.current_index)
+        else:
+            self.operation_status_label.setText('No more images in the source folder.')
+
+        self.centralWidget().setFocus()
 
     # --- Dynamic folder-row helpers ---
 
@@ -1088,6 +1178,12 @@ class ImageSorterApp(QMainWindow):
 
         if isinstance(self.focusWidget(), QLineEdit):
             super().keyPressEvent(event)
+            return
+
+        # D = delete current image
+        if key == Qt.Key.Key_D.value:
+            self.delete_current_image()
+            event.accept()
             return
 
         key_char = None

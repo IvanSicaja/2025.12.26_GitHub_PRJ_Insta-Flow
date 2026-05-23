@@ -1008,10 +1008,16 @@ class ImageSorterApp(QMainWindow):
         self.settings.setValue('last_folder', folder)
         self.source_folder_bar_label.setText(folder)
 
-        self.images = [
-            f for f in sorted(os.listdir(folder))
-            if f.lower().endswith(IMAGE_EXTENSIONS)
-        ]
+        # Collect all images recursively from all subfolders, sorted by full path.
+        # self.images stores relative paths (e.g. "subfolder/img.arw") so the
+        # full path is always: os.path.join(self.current_folder, relative_path)
+        all_images = []
+        for dirpath, _dirnames, filenames in os.walk(folder):
+            for fname in filenames:
+                if fname.lower().endswith(IMAGE_EXTENSIONS):
+                    rel = os.path.relpath(os.path.join(dirpath, fname), folder)
+                    all_images.append(rel)
+        self.images = sorted(all_images, key=str.lower)
         if not self.images:
             QMessageBox.warning(self, 'No Images', 'Selected folder has no images.')
             return
@@ -1130,6 +1136,7 @@ class ImageSorterApp(QMainWindow):
             return
 
         current_name = self.images[self.current_index]
+        # Show the full relative path so subfolder origin is always visible
         self.current_image_name_label.setText(current_name)
 
         img_path = os.path.join(self.current_folder, current_name)

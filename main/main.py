@@ -456,7 +456,7 @@ class ImageSorterApp(QMainWindow):
         self.folder_rows_layout.setSpacing(4)
         left_panel.addWidget(self.folder_rows_container)
 
-        default_names = ['Family Milestones', 'My Milestones', '', '', '', '', '']
+        default_names = ['', '', '', '', '', '', '']
         for i in range(7):
             self._add_folder_row(default_names[i])
 
@@ -1281,7 +1281,24 @@ class ImageSorterApp(QMainWindow):
 
         target_base = self.get_effective_target_folder()
         target_folder = os.path.join(target_base, target_name)
-        os.makedirs(target_folder, exist_ok=True)
+
+        # If the folder doesn't exist yet, ask the user instead of creating silently
+        if not os.path.isdir(target_folder):
+            reply = QMessageBox.question(
+                self,
+                'Folder Does Not Exist',
+                f'The folder "{target_name}" does not exist yet in:\n{target_base}\n\n'
+                f'Create it now and continue?',
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Cancel,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+            try:
+                os.makedirs(target_folder, exist_ok=True)
+            except Exception as e:
+                QMessageBox.critical(self, 'Error', f'Could not create folder:\n{e}')
+                return
         dst_path = os.path.join(target_folder, os.path.basename(src_path))
 
         if os.path.exists(dst_path):
@@ -1308,9 +1325,11 @@ class ImageSorterApp(QMainWindow):
         op = 'MOVED' if not self.copy_mode else 'COPIED'
         op_color = '#e67e22' if not self.copy_mode else '#27ae60'
         filename = os.path.basename(src_path)
+        # rel_path includes any subfolder, e.g. "2024/January/DSC001.ARW"
+        rel_path = self.images[self.current_index]
 
         # filename + arrow + folder + op word in the main label; badge + overlay flash
-        self.operation_status_label.setText(f'{filename}  \u2192  {target_name}  [{op}]')
+        self.operation_status_label.setText(f'{rel_path}  \u2192  {target_name}  [{op}]')
         self.operation_status_label.setStyleSheet('color: #ccc; font-size: 9pt; background: transparent;')
         self.operation_status_label.setTextFormat(Qt.TextFormat.PlainText)
 

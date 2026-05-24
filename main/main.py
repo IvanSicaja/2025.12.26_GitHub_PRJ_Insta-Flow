@@ -448,6 +448,10 @@ class ImageSorterApp(QMainWindow):
         self.folder_enabled = []
         self.folder_keys = []
         self.folder_del_btns = []
+        self.folder_save_btns = []      # ✔ save buttons (one per row, hidden by default)
+        self.folder_cancel_btns = []    # ✕ cancel buttons (one per row, hidden by default)
+        self.folder_saved_names = []    # last committed folder name per row
+        self.folder_saved_keys = []     # last committed key per row
         self.folder_rows_widgets = []
 
         self.folder_rows_container = QWidget()
@@ -835,6 +839,17 @@ class ImageSorterApp(QMainWindow):
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(3)
 
+        ICON_BTN = """
+            QPushButton {{
+                border-radius: 5px; border: 2px solid #aaa;
+                background: white; padding: 2px; font-size: 9pt; color: #444;
+                width: {w}px; height: 28px;
+            }}
+            QPushButton:checked {{ background-color: #e8e8e8; border-color: #888; }}
+            QPushButton:hover   {{ background-color: #f0f0f0; }}
+        """
+
+        # ── Key field + ⌨ button ──────────────────────────────────────────
         key_edit = QLineEdit(default_key)
         key_edit.setFixedWidth(28)
         key_edit.setFixedHeight(30)
@@ -848,21 +863,10 @@ class ImageSorterApp(QMainWindow):
                 background: transparent; padding: 0px;
             }
             QLineEdit:enabled {
-                background: white; border: 2px solid #f0a500;
-                color: #c0700a;
+                background: white; border: 2px solid #f0a500; color: #c0700a;
             }
         """)
         row.addWidget(key_edit)
-
-        ICON_BTN = """
-            QPushButton {{
-                border-radius: 5px; border: 2px solid #aaa;
-                background: white; padding: 2px; font-size: 9pt; color: #444;
-                width: {w}px; height: 28px;
-            }}
-            QPushButton:checked {{ background-color: #e8e8e8; border-color: #888; }}
-            QPushButton:hover   {{ background-color: #f0f0f0; }}
-        """
 
         key_btn = QPushButton('\u2328')
         key_btn.setCheckable(True)
@@ -872,10 +876,9 @@ class ImageSorterApp(QMainWindow):
         key_btn.setToolTip('Edit the shortcut key for this folder')
         key_btn.setStyleSheet(ICON_BTN.format(w=26) +
             'QPushButton:checked { background-color: #fff3cd; border-color: #f0a500; color: #c0700a; }')
-        key_btn.toggled.connect(key_edit.setEnabled)
-        key_btn.toggled.connect(lambda checked: self.on_pencil_clicked() if not checked else None)
         row.addWidget(key_btn)
 
+        # ── Folder name field + ✎ button ─────────────────────────────────
         pencil_btn = QPushButton('\u270e')
         pencil_btn.setCheckable(True)
         pencil_btn.setFixedWidth(26)
@@ -884,7 +887,6 @@ class ImageSorterApp(QMainWindow):
             'QPushButton:checked { background-color: #dbeafe; border-color: #3b82f6; color: #1d4ed8; }')
         pencil_btn.setToolTip('Enable editing of folder name')
         pencil_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        pencil_btn.clicked.connect(self.on_pencil_clicked)
         row.addWidget(pencil_btn)
 
         edit = QLineEdit(default_name)
@@ -896,8 +898,36 @@ class ImageSorterApp(QMainWindow):
         )
         row.addWidget(edit)
 
-        pencil_btn.toggled.connect(edit.setEnabled)
+        # ── Save ✔ and Cancel ✕ buttons (hidden until editing starts) ─────
+        COMMIT_BTN = """
+            QPushButton {{
+                border-radius: 5px; border: 2px solid {border};
+                background: {bg}; padding: 2px; font-size: 10pt;
+                font-weight: bold; color: {fg}; width: 24px; height: 28px;
+            }}
+            QPushButton:hover {{ background: {hbg}; }}
+        """
+        save_btn = QPushButton('\u2714')   # ✔
+        save_btn.setFixedWidth(24)
+        save_btn.setFixedHeight(28)
+        save_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        save_btn.setToolTip('Save changes')
+        save_btn.setStyleSheet(COMMIT_BTN.format(
+            border='#27ae60', bg='#eafaf1', fg='#27ae60', hbg='#d5f5e3'))
+        save_btn.setVisible(False)
+        row.addWidget(save_btn)
 
+        cancel_btn = QPushButton('\u2716')   # ✖
+        cancel_btn.setFixedWidth(24)
+        cancel_btn.setFixedHeight(28)
+        cancel_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        cancel_btn.setToolTip('Cancel — restore previous name/key')
+        cancel_btn.setStyleSheet(COMMIT_BTN.format(
+            border='#e74c3c', bg='#fdf2f2', fg='#e74c3c', hbg='#fadbd8'))
+        cancel_btn.setVisible(False)
+        row.addWidget(cancel_btn)
+
+        # ── Reorder / delete buttons ──────────────────────────────────────
         up_btn = QPushButton('\u25b2')
         up_btn.setFixedWidth(20)
         up_btn.setFixedHeight(28)
@@ -926,10 +956,79 @@ class ImageSorterApp(QMainWindow):
         del_btn.clicked.connect(lambda _, w=row_widget: self._delete_row(w))
         row.addWidget(del_btn)
 
+        # ── Wire up editing logic ─────────────────────────────────────────
+        # We need refs to all four widgets inside the lambdas
+        def _on_key_toggled(checked,
+                            _key_edit=key_edit, _key_btn=key_btn,
+                            _pencil_btn=pencil_btn,
+                            _save=save_btn, _cancel=cancel_btn):
+            _key_edit.setEnabled(checked)
+            # Show/hide save+cancel; track editing state across both toggles
+            editing = checked or _pencil_btn.isChecked()
+            _save.setVisible(editing)
+            _cancel.setVisible(editing)
+            if not checked:
+                self.centralWidget().setFocus()
+
+        def _on_pencil_toggled(checked,
+                               _edit=edit, _pencil_btn=pencil_btn,
+                               _key_btn=key_btn,
+                               _save=save_btn, _cancel=cancel_btn):
+            _edit.setEnabled(checked)
+            editing = checked or _key_btn.isChecked()
+            _save.setVisible(editing)
+            _cancel.setVisible(editing)
+            if not checked:
+                self.centralWidget().setFocus()
+
+        def _on_save(checked=False,
+                     _edit=edit, _key_edit=key_edit,
+                     _pencil_btn=pencil_btn, _key_btn=key_btn,
+                     _save=save_btn, _cancel=cancel_btn,
+                     _row_idx=[idx]):
+            """Commit both fields, update saved values, exit editing mode."""
+            i = self.folder_rows_widgets.index(row_widget)
+            self.folder_saved_names[i] = _edit.text()
+            self.folder_saved_keys[i]  = _key_edit.text()
+            # Deactivate both toggle buttons (suppressing signals to avoid recursion)
+            _pencil_btn.blockSignals(True); _pencil_btn.setChecked(False); _pencil_btn.blockSignals(False)
+            _key_btn.blockSignals(True);    _key_btn.setChecked(False);    _key_btn.blockSignals(False)
+            _edit.setEnabled(False)
+            _key_edit.setEnabled(False)
+            _save.setVisible(False)
+            _cancel.setVisible(False)
+            self.centralWidget().setFocus()
+
+        def _on_cancel(checked=False,
+                       _edit=edit, _key_edit=key_edit,
+                       _pencil_btn=pencil_btn, _key_btn=key_btn,
+                       _save=save_btn, _cancel=cancel_btn):
+            """Restore previous saved values and exit editing mode."""
+            i = self.folder_rows_widgets.index(row_widget)
+            _edit.setText(self.folder_saved_names[i])
+            _key_edit.setText(self.folder_saved_keys[i])
+            _pencil_btn.blockSignals(True); _pencil_btn.setChecked(False); _pencil_btn.blockSignals(False)
+            _key_btn.blockSignals(True);    _key_btn.setChecked(False);    _key_btn.blockSignals(False)
+            _edit.setEnabled(False)
+            _key_edit.setEnabled(False)
+            _save.setVisible(False)
+            _cancel.setVisible(False)
+            self.centralWidget().setFocus()
+
+        key_btn.toggled.connect(_on_key_toggled)
+        pencil_btn.toggled.connect(_on_pencil_toggled)
+        save_btn.clicked.connect(_on_save)
+        cancel_btn.clicked.connect(_on_cancel)
+
+        # ── Register in tracking lists ────────────────────────────────────
         self.folder_inputs.append(edit)
         self.folder_enabled.append(pencil_btn)
         self.folder_keys.append(key_edit)
         self.folder_del_btns.append(del_btn)
+        self.folder_save_btns.append(save_btn)
+        self.folder_cancel_btns.append(cancel_btn)
+        self.folder_saved_names.append(default_name)
+        self.folder_saved_keys.append(default_key)
         self.folder_rows_widgets.append(row_widget)
         self.folder_rows_layout.addWidget(row_widget)
 
@@ -962,12 +1061,19 @@ class ImageSorterApp(QMainWindow):
         self.folder_enabled.pop(idx)
         self.folder_keys.pop(idx)
         self.folder_del_btns.pop(idx)
+        self.folder_save_btns.pop(idx)
+        self.folder_cancel_btns.pop(idx)
+        self.folder_saved_names.pop(idx)
+        self.folder_saved_keys.pop(idx)
         self._refresh_key_labels()
         self.centralWidget().setFocus()
 
     def _swap_rows(self, i, j):
         for lst in (self.folder_rows_widgets, self.folder_inputs,
-                    self.folder_enabled, self.folder_keys, self.folder_del_btns):
+                    self.folder_enabled, self.folder_keys, self.folder_del_btns,
+                    self.folder_save_btns, self.folder_cancel_btns,
+                    self.folder_saved_names, self.folder_saved_keys):
+            lst[i], lst[j] = lst[j], lst[i]
             lst[i], lst[j] = lst[j], lst[i]
         for w in self.folder_rows_widgets:
             self.folder_rows_layout.removeWidget(w)
@@ -1055,6 +1161,10 @@ class ImageSorterApp(QMainWindow):
             self.folder_enabled.clear()
             self.folder_keys.clear()
             self.folder_del_btns.clear()
+            self.folder_save_btns.clear()
+            self.folder_cancel_btns.clear()
+            self.folder_saved_names.clear()
+            self.folder_saved_keys.clear()
 
             count = max(len(subfolders), 1)
             for i in range(count):

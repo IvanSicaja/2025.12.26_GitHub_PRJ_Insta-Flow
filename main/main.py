@@ -208,6 +208,7 @@ class ImageSorterApp(QMainWindow):
         self.copy_mode = True
         self.folder_keys = []
         self._pix_cache = PixmapCache()   # background preloader
+        self._loaded_subfolder_names: set[str] = set()  # names as of last "Load Existing Subfolders"
         self.settings = QSettings('ImageSorterApp', 'Settings')
         self._build_ui()
         self.update_mode_button_style()
@@ -997,6 +998,7 @@ class ImageSorterApp(QMainWindow):
             _key_edit.setEnabled(False)
             _save.setVisible(False)
             _cancel.setVisible(False)
+            self._update_create_folders_highlight()
             self.centralWidget().setFocus()
 
         def _on_cancel(checked=False,
@@ -1102,6 +1104,43 @@ class ImageSorterApp(QMainWindow):
     def on_pencil_clicked(self):
         self.centralWidget().setFocus()
 
+    def _update_create_folders_highlight(self):
+        """
+        Highlight 'Create Folders' with an orange border when any saved folder
+        name differs from what was loaded by 'Load Existing Subfolders'.
+        Resets to normal when all names match the loaded set (or no names loaded).
+        """
+        if not self._loaded_subfolder_names:
+            # Nothing was loaded — no highlight needed
+            self.create_folders_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: white; font-weight: bold; padding: 4px;
+                    border: 2px solid #aaa; border-radius: 6px;
+                }
+                QPushButton:hover { background-color: #f8f8f8; }
+            """)
+            return
+
+        current_names = {n for n in self.folder_saved_names if n.strip()}
+        has_new = bool(current_names - self._loaded_subfolder_names)
+
+        if has_new:
+            self.create_folders_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #fff8ee; font-weight: bold; padding: 4px;
+                    border: 2px solid #f0a500; border-radius: 6px; color: #b36800;
+                }
+                QPushButton:hover { background-color: #fff0d0; }
+            """)
+        else:
+            self.create_folders_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: white; font-weight: bold; padding: 4px;
+                    border: 2px solid #aaa; border-radius: 6px;
+                }
+                QPushButton:hover { background-color: #f8f8f8; }
+            """)
+
     def open_folder(self):
         last_folder = self.settings.value('last_folder', '')
         start_dir = last_folder if last_folder and os.path.isdir(last_folder) else os.getcwd()
@@ -1173,6 +1212,9 @@ class ImageSorterApp(QMainWindow):
                 # FIX 3: do NOT auto-enable pencil/edit — just populate names, leave locked
 
             self._refresh_key_labels()
+            # Record what was loaded so we can detect new names later
+            self._loaded_subfolder_names = set(subfolders)
+            self._update_create_folders_highlight()
             QMessageBox.information(
                 self, 'Subfolders Loaded',
                 f'Loaded {len(subfolders)} subfolder(s) \u2014 {count} key\u2013folder pair(s) created.'
